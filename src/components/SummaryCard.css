@@ -1,0 +1,117 @@
+.summary-card {
+  background: var(--white);
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  border-left: 4px solid transparent;
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.summary-card-icon {
+  font-size: 2.5rem;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--earist-cream-light);
+  flex-shrink: 0;
+}
+
+.summary-card-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.summary-card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.summary-card-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--earist-maroon);
+  line-height: 1;
+}
+
+.summary-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--gray-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summary-card-subtitle {
+  font-size: 0.85rem;
+  color: var(--gray);
+  margin-top: 0.25rem;
+}
+
+/* Variants */
+.summary-card--pending {
+  border-left-color: #ffc107;
+}
+
+.summary-card--pending .summary-card-icon {
+  background: rgba(255, 193, 7, 0.2);
+}
+
+.summary-card--due {
+  border-left-color: #dc3545;
+}
+
+.summary-card--due .summary-card-icon {
+  background: rgba(220, 53, 69, 0.2);
+}
+
+.summary-card--active {
+  border-left-color: #28a745;
+}
+
+.summary-card--active .summary-card-icon {
+  background: rgba(40, 167, 69, 0.2);
+}
+
+.summary-card--notifications {
+  border-left-color: #007bff;
+}
+
+.summary-card--notifications .summary-card-icon {
+  background: rgba(0, 123, 255, 0.2);
+}
+
+@media (max-width: 768px) {
+  .summary-card {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .summary-card-icon {
+    width: 48px;
+    height: 48px;
+    font-size: 2rem;
+  }
+
+  .summary-card-value {
+    font-size: 1.5rem;
+  }
+
+  .summary-card-title {
+    font-size: 0.85rem;
+  }
+}
+

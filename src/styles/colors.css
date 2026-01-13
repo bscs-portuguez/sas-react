@@ -1,0 +1,31 @@
+/* EARIST Color Scheme */
+:root {
+  /* Primary Colors */
+  --earist-maroon: #800020;
+  --earist-maroon-dark: #5c0017;
+  --earist-maroon-light: #a00028;
+  
+  /* Secondary Colors */
+  --earist-cream: #f5f5dc;
+  --earist-cream-light: #fafafa;
+  --earist-cream-dark: #e8e8d0;
+  
+  /* Accent Colors */
+  --earist-yellow: #ffd700;
+  --earist-yellow-light: #ffed4e;
+  --earist-yellow-dark: #ccaa00;
+  
+  /* Neutral Colors */
+  --white: #ffffff;
+  --gray-light: #f8f9fa;
+  --gray: #6c757d;
+  --gray-dark: #343a40;
+  --black: #000000;
+  
+  /* Semantic Colors */
+  --success: #28a745;
+  --error: #dc3545;
+  --warning: #ffc107;
+  --info: #17a2b8;
+}
+

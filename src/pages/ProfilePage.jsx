@@ -1,0 +1,706 @@
+import { useState, useEffect } from "react";
+import { auth } from "../config/firebase";
+import { signOut } from "firebase/auth";
+import { getUserById, updateUserPassword, updateUserEmail, submitVerificationDocument, deleteUserAccount } from "../services/userService";
+import { getOrganizationById } from "../services/organizationService";
+import { uploadVerificationDocument, deleteVerificationDocument } from "../services/storageService";
+import Navbar from "../components/Navbar";
+import DashboardLayout from "../components/DashboardLayout";
+import LoadingScreen from "../components/LoadingScreen";
+import StatusBanner from "../components/StatusBanner";
+import "../styles/colors.css";
+import "./ProfilePage.css";
+
+const ProfilePage = () => {
+  const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState(null);
+  const [organizationData, setOrganizationData] = useState(null);
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: ""
+  });
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  
+  // Email editing state
+  const [isEditingEmail, setIsEditingEmail] = useState(false);
+  const [emailValue, setEmailValue] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [emailSuccess, setEmailSuccess] = useState("");
+  const [updatingEmail, setUpdatingEmail] = useState(false);
+  
+  // Verification document upload state
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
+  
+  // Account actions state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        const userDoc = await getUserById(user.uid);
+        setUserData(userDoc);
+        setEmailValue(user.email || "");
+
+        if (userDoc?.organizationId) {
+          const orgDoc = await getOrganizationById(userDoc.organizationId);
+          setOrganizationData(orgDoc);
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    setPasswordError("");
+    setPasswordSuccess("");
+    setUpdatingPassword(true);
+
+    try {
+      if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+        throw new Error("All fields are required");
+      }
+
+      if (passwordData.newPassword.length < 6) {
+        throw new Error("New password must be at least 6 characters");
+      }
+
+      if (passwordData.newPassword !== passwordData.confirmPassword) {
+        throw new Error("New passwords do not match");
+      }
+
+      await updateUserPassword(passwordData.newPassword);
+
+      setPasswordSuccess("Password updated successfully");
+      setPasswordData({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: ""
+      });
+      setShowPasswordForm(false);
+    } catch (error) {
+      console.error("Error updating password:", error);
+      setPasswordError(error.message || "Failed to update password. Please try again.");
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
+  const handleEmailUpdate = async (e) => {
+    e.preventDefault();
+    setEmailError("");
+    setEmailSuccess("");
+    setUpdatingEmail(true);
+
+    try {
+      if (!emailValue || !emailValue.includes("@")) {
+        throw new Error("Please enter a valid email address");
+      }
+
+      await updateUserEmail(emailValue);
+      setEmailSuccess("Email updated successfully");
+      setIsEditingEmail(false);
+      
+      // Refresh user data
+      const user = auth.currentUser;
+      if (user) {
+        const userDoc = await getUserById(user.uid);
+        setUserData(userDoc);
+      }
+    } catch (error) {
+      console.error("Error updating email:", error);
+      setEmailError(error.message || "Failed to update email. Please try again.");
+    } finally {
+      setUpdatingEmail(false);
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedFile(file);
+      setUploadError("");
+    }
+  };
+
+  const handleVerificationSubmit = async () => {
+    if (!selectedFile) {
+      setUploadError("Please select a file to upload");
+      return;
+    }
+
+    setUploadError("");
+    setUploadSuccess("");
+    setUploadingDocument(true);
+
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      // Delete old document if exists
+      if (userData?.verificationDocumentUrl) {
+        try {
+          await deleteVerificationDocument(userData.verificationDocumentUrl);
+        } catch (error) {
+          console.warn("Error deleting old document:", error);
+          // Continue with upload even if deletion fails
+        }
+      }
+
+      // Upload new document
+      const documentUrl = await uploadVerificationDocument(selectedFile, user.uid);
+      
+      // Update user document
+      await submitVerificationDocument(user.uid, documentUrl);
+      
+      setUploadSuccess("Verification document submitted successfully. Your account is now pending verification.");
+      setSelectedFile(null);
+      
+      // Refresh user data
+      const userDoc = await getUserById(user.uid);
+      setUserData(userDoc);
+      
+      // Reset file input
+      const fileInput = document.getElementById("verification-file");
+      if (fileInput) {
+        fileInput.value = "";
+      }
+    } catch (error) {
+      console.error("Error submitting verification document:", error);
+      setUploadError(error.message || "Failed to upload document. Please try again.");
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      // User will be redirected by auth state change
+    } catch (error) {
+      console.error("Error signing out:", error);
+      alert("Failed to sign out. Please try again.");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteError("");
+    setDeletingAccount(true);
+
+    try {
+      // Delete verification document if exists
+      if (userData?.verificationDocumentUrl) {
+        try {
+          await deleteVerificationDocument(userData.verificationDocumentUrl);
+        } catch (error) {
+          console.warn("Error deleting verification document:", error);
+          // Continue with account deletion even if document deletion fails
+        }
+      }
+
+      // Delete user account
+      await deleteUserAccount();
+      
+      // Sign out after deletion
+      await signOut(auth);
+      // User will be redirected by auth state change
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      setDeleteError(error.message || "Failed to delete account. Please try again.");
+      setDeletingAccount(false);
+    }
+  };
+
+  const formatDate = (timestamp) => {
+    if (!timestamp) return "N/A";
+    if (timestamp.toDate) {
+      return timestamp.toDate().toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    }
+    return "N/A";
+  };
+
+  const getVerificationStatusLabel = (status) => {
+    const labels = {
+      unverified: "Unverified",
+      pending: "Pending Verification",
+      verified: "Verified",
+      rejected: "Rejected"
+    };
+    return labels[status] || status;
+  };
+
+  const getVerificationStatusClass = (status) => {
+    const classes = {
+      unverified: "status-unverified",
+      pending: "status-pending",
+      verified: "status-verified",
+      rejected: "status-rejected"
+    };
+    return classes[status] || "";
+  };
+
+  const getStatusBadgeClass = (status) => {
+    const statusClasses = {
+      unverified: "status-badge-pending",
+      pending: "status-badge-pending",
+      verified: "status-badge-approved",
+      rejected: "status-badge-rejected"
+    };
+    return statusClasses[status] || "status-badge-default";
+  };
+
+  if (loading) {
+    return (
+      <div className="home-container">
+        <Navbar
+          organizationName={organizationData?.name || "Organization"}
+          role={userData?.role || "ISG"}
+          verificationStatus={userData?.verificationStatus || "unverified"}
+          userName={userData?.fullName || auth.currentUser?.email || "User"}
+        />
+        <DashboardLayout currentPage="profile">
+          <LoadingScreen compact={true} />
+        </DashboardLayout>
+      </div>
+    );
+  }
+
+  const organizationName = organizationData?.name || "Organization";
+  const userRole = userData?.role || "ISG";
+  const userName = userData?.fullName || auth.currentUser?.email || "User";
+  const verificationStatus = userData?.verificationStatus || "unverified";
+  const isVerified = verificationStatus === "verified";
+  const isUnverified = verificationStatus === "unverified";
+  const isPending = verificationStatus === "pending";
+
+  return (
+    <div className="home-container">
+      <Navbar
+        organizationName={organizationName}
+        role={userRole}
+        verificationStatus={verificationStatus}
+        userName={userName}
+      />
+      
+      <DashboardLayout currentPage="profile">
+        <div className="profile-page">
+          {/* Status Banner for Unverified Users */}
+          {!isVerified && (
+            <StatusBanner verificationStatus={verificationStatus} />
+          )}
+
+          {/* Profile Header */}
+          <div className="profile-header">
+            <div className="profile-header-content">
+              <div>
+                <h1 className="profile-name">{userData?.fullName || "User"}</h1>
+                <p className="profile-role">{userRole} - {userData?.userRole || "Member"}</p>
+              </div>
+              <div className="verification-badge-container">
+                <span className={`status-badge ${getStatusBadgeClass(verificationStatus)}`}>
+                  {getVerificationStatusLabel(verificationStatus)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="profile-content">
+            {/* Account Information Section */}
+            <div className="profile-section">
+              <h2 className="section-title">Account Information</h2>
+              <div className="profile-info-grid">
+                <div className="info-item">
+                  <label className="info-label">Full Name</label>
+                  <div className="info-value">{userData?.fullName || "Not set"}</div>
+                </div>
+                <div className="info-item">
+                  <label className="info-label">Email</label>
+                  {!isEditingEmail ? (
+                    <div className="info-value-with-action">
+                      <div className="info-value">{emailValue || "Not set"}</div>
+                      <button
+                        className="btn-link"
+                        onClick={() => setIsEditingEmail(true)}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleEmailUpdate} className="inline-edit-form">
+                      {emailError && <div className="form-error-small">{emailError}</div>}
+                      {emailSuccess && <div className="form-success-small">{emailSuccess}</div>}
+                      <div className="inline-edit-input-group">
+                        <input
+                          type="email"
+                          className="form-input inline-edit-input"
+                          value={emailValue}
+                          onChange={(e) => setEmailValue(e.target.value)}
+                          required
+                        />
+                        <div className="inline-edit-actions">
+                          <button
+                            type="button"
+                            className="btn-link"
+                            onClick={() => {
+                              setIsEditingEmail(false);
+                              setEmailValue(auth.currentUser?.email || "");
+                              setEmailError("");
+                              setEmailSuccess("");
+                            }}
+                            disabled={updatingEmail}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="btn-primary-small"
+                            disabled={updatingEmail}
+                          >
+                            {updatingEmail ? "Saving..." : "Save"}
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  )}
+                </div>
+                <div className="info-item">
+                  <label className="info-label">Organization</label>
+                  <div className="info-value">{organizationName}</div>
+                </div>
+                <div className="info-item">
+                  <label className="info-label">User Role</label>
+                  <div className="info-value">{userData?.userRole || "Not set"}</div>
+                </div>
+                <div className="info-item">
+                  <label className="info-label">Status</label>
+                  <div className="info-value">{userData?.status || "active"}</div>
+                </div>
+                <div className="info-item">
+                  <label className="info-label">Password</label>
+                  <div className="info-value-with-action">
+                    <div className="info-value">••••••••</div>
+                    {!showPasswordForm && (
+                      <button
+                        className="btn-link"
+                        onClick={() => setShowPasswordForm(true)}
+                      >
+                        Change Password
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Password Change Form */}
+              {showPasswordForm && (
+                <div className="password-form-container">
+                  <form className="password-form" onSubmit={handlePasswordChange}>
+                    {passwordError && (
+                      <div className="form-error">{passwordError}</div>
+                    )}
+                    {passwordSuccess && (
+                      <div className="form-success">{passwordSuccess}</div>
+                    )}
+                    
+                    <div className="form-group">
+                      <label htmlFor="currentPassword" className="form-label">
+                        Current Password
+                      </label>
+                      <input
+                        type="password"
+                        id="currentPassword"
+                        className="form-input"
+                        value={passwordData.currentPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="newPassword" className="form-label">
+                        New Password
+                      </label>
+                      <input
+                        type="password"
+                        id="newPassword"
+                        className="form-input"
+                        value={passwordData.newPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                        minLength={6}
+                        required
+                      />
+                      <span className="form-hint">Must be at least 6 characters</span>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="confirmPassword" className="form-label">
+                        Confirm New Password
+                      </label>
+                      <input
+                        type="password"
+                        id="confirmPassword"
+                        className="form-input"
+                        value={passwordData.confirmPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-actions">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          setShowPasswordForm(false);
+                          setPasswordData({
+                            currentPassword: "",
+                            newPassword: "",
+                            confirmPassword: ""
+                          });
+                          setPasswordError("");
+                          setPasswordSuccess("");
+                        }}
+                        disabled={updatingPassword}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn-primary"
+                        disabled={updatingPassword}
+                      >
+                        {updatingPassword ? "Updating..." : "Update Password"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </div>
+
+            {/* Verification Section */}
+            <div className="profile-section">
+              <h2 className="section-title">Verification</h2>
+              
+              {isVerified ? (
+                <div className="verification-verified">
+                  <div className="verification-status-info">
+                    <div className="info-item">
+                      <label className="info-label">Status</label>
+                      <div className={`info-value ${getVerificationStatusClass(verificationStatus)}`}>
+                        {getVerificationStatusLabel(verificationStatus)}
+                      </div>
+                    </div>
+                    {userData?.verificationDocumentUrl && (
+                      <div className="info-item">
+                        <label className="info-label">Verification Document</label>
+                        <div className="info-value">
+                          <a
+                            href={userData.verificationDocumentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="document-link"
+                          >
+                            📄 View Verification Document
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="verification-unverified">
+                  <div className="verification-status-info">
+                    <div className="info-item">
+                      <label className="info-label">Status</label>
+                      <div className={`info-value ${getVerificationStatusClass(verificationStatus)}`}>
+                        {getVerificationStatusLabel(verificationStatus)}
+                      </div>
+                    </div>
+                    {userData?.verificationDocumentUrl && (
+                      <div className="info-item">
+                        <label className="info-label">Submitted Document</label>
+                        <div className="info-value">
+                          <a
+                            href={userData.verificationDocumentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="document-link"
+                          >
+                            📄 View Current Document
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {uploadError && (
+                    <div className="form-error">{uploadError}</div>
+                  )}
+                  {uploadSuccess && (
+                    <div className="form-success">{uploadSuccess}</div>
+                  )}
+
+                  <div className="verification-upload-section">
+                    <div className="form-group">
+                      <label htmlFor="verification-file" className="form-label">
+                        Verification Document <span className="required">*</span>
+                      </label>
+                      <input
+                        type="file"
+                        id="verification-file"
+                        className="form-input-file"
+                        accept="image/*,.pdf"
+                        onChange={handleFileSelect}
+                        disabled={uploadingDocument || isPending}
+                      />
+                      <span className="form-hint">
+                        Accepted formats: JPG, PNG, PDF (Max 10MB)
+                        {isPending && " - Submission is pending review"}
+                      </span>
+                    </div>
+
+                    {selectedFile && (
+                      <div className="file-selected">
+                        <span>Selected: {selectedFile.name}</span>
+                        <button
+                          type="button"
+                          className="btn-link-small"
+                          onClick={() => {
+                            setSelectedFile(null);
+                            const fileInput = document.getElementById("verification-file");
+                            if (fileInput) fileInput.value = "";
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      className="btn-primary"
+                      onClick={handleVerificationSubmit}
+                      disabled={!selectedFile || uploadingDocument || isPending}
+                    >
+                      {uploadingDocument ? "Uploading..." : "Submit Verification"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Account History Section */}
+            <div className="profile-section">
+              <h2 className="section-title">Account History</h2>
+              <div className="profile-info-grid">
+                <div className="info-item">
+                  <label className="info-label">Date Created</label>
+                  <div className="info-value">{formatDate(userData?.dateCreated)}</div>
+                </div>
+                <div className="info-item">
+                  <label className="info-label">Last Updated</label>
+                  <div className="info-value">{formatDate(userData?.lastUpdated)}</div>
+                </div>
+                <div className="info-item">
+                  <label className="info-label">Last Login</label>
+                  <div className="info-value">{formatDate(userData?.lastLogin)}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Account Actions */}
+            <div className="account-actions">
+              <button
+                className="btn-secondary"
+                onClick={handleLogout}
+              >
+                Log Out
+              </button>
+              <button
+                className="btn-danger"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                Delete Account
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Delete Account Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="modal-overlay" onClick={() => !deletingAccount && setShowDeleteConfirm(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Delete Account</h3>
+                {!deletingAccount && (
+                  <button className="modal-close" onClick={() => setShowDeleteConfirm(false)}>×</button>
+                )}
+              </div>
+              <div className="modal-body">
+                {deleteError && (
+                  <div className="form-error">{deleteError}</div>
+                )}
+                <p className="delete-warning">
+                  Are you sure you want to delete your account? This action cannot be undone.
+                </p>
+                <p className="delete-details">
+                  This will permanently delete:
+                </p>
+                <ul className="delete-list">
+                  <li>Your account and all associated data</li>
+                  <li>Your verification documents</li>
+                  <li>All your activity history</li>
+                </ul>
+                <div className="modal-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeleteError("");
+                    }}
+                    disabled={deletingAccount}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn-danger"
+                    onClick={handleDeleteAccount}
+                    disabled={deletingAccount}
+                  >
+                    {deletingAccount ? "Deleting..." : "Yes, Delete My Account"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </DashboardLayout>
+    </div>
+  );
+};
+
+export default ProfilePage;

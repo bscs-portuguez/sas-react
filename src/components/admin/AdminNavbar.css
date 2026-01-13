@@ -1,0 +1,249 @@
+.admin-navbar {
+  background: var(--earist-maroon);
+  color: var(--white);
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2rem;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.admin-navbar-left {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.admin-navbar-logo-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.admin-navbar-logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--white);
+}
+
+.admin-navbar-logo-img {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+}
+
+.admin-navbar-app-name {
+  font-size: 0.75rem;
+  opacity: 0.9;
+  font-weight: 400;
+}
+
+.admin-navbar-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+}
+
+.admin-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.admin-icon {
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Make icons white on maroon background */
+.navbar-icon-white,
+.navbar-icon-white img {
+  filter: brightness(0) invert(1) !important;
+}
+
+.admin-label {
+  font-weight: 600;
+}
+
+.admin-sub-role {
+  font-size: 0.85rem;
+  opacity: 0.9;
+  font-weight: 400;
+}
+
+.admin-notifications {
+  display: flex;
+  align-items: center;
+}
+
+.notification-button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: all 0.2s ease;
+}
+
+.notification-button img {
+  filter: brightness(0) invert(1) !important;
+}
+
+.notification-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.1);
+}
+
+.admin-navbar-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.admin-user-menu {
+  position: relative;
+}
+
+.admin-user-button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: var(--white);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  height: 40px;
+  box-sizing: border-box;
+  line-height: 1;
+}
+
+.admin-user-button img {
+  filter: brightness(0) invert(1) !important;
+}
+
+.admin-user-button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.admin-user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-user-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1;
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-menu-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.8;
+}
+
+.admin-menu-arrow img {
+  filter: brightness(0) invert(1) !important;
+}
+
+.admin-user-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background: var(--white);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  overflow: hidden;
+  z-index: 1001;
+}
+
+.admin-user-menu-item {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--gray-dark);
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease;
+}
+
+.admin-user-menu-item img {
+  flex-shrink: 0;
+}
+
+.admin-user-menu-item:hover {
+  background: var(--gray-light);
+}
+
+.admin-user-menu-item--danger {
+  color: var(--error);
+}
+
+.admin-user-menu-item--danger:hover {
+  background: #fee;
+}
+
+.admin-user-menu-divider {
+  height: 1px;
+  background: var(--gray-light);
+  margin: 0.25rem 0;
+}
+
+@media (max-width: 768px) {
+  .admin-navbar {
+    padding: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .admin-navbar-center {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .admin-user-name {
+    display: none;
+  }
+}
+

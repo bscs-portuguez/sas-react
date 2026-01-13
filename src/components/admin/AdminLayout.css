@@ -1,0 +1,28 @@
+.admin-layout {
+  min-height: 100vh;
+  background: var(--earist-cream-light);
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-layout-content {
+  display: flex;
+  flex: 1;
+  min-height: calc(100vh - 80px);
+}
+
+.admin-main {
+  flex: 1;
+  min-width: 0;
+  background: var(--earist-cream-light);
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .admin-main {
+    padding: 1.5rem 1rem;
+  }
+}
+
+

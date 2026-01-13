@@ -1,0 +1,84 @@
+.action-card {
+  background: var(--white);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  border: 2px solid transparent;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.action-card:hover:not(.action-card--disabled) {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: var(--earist-maroon);
+}
+
+.action-card--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--gray-light);
+}
+
+.action-card-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.75rem;
+  background: linear-gradient(135deg, var(--earist-maroon), var(--earist-maroon-light));
+  color: var(--white);
+}
+
+.action-card-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.action-card--disabled .action-card-icon {
+  background: var(--gray);
+  opacity: 0.7;
+}
+
+.action-card-content {
+  flex: 1;
+}
+
+.action-card-title {
+  color: var(--earist-maroon);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.action-card--disabled .action-card-title {
+  color: var(--gray);
+}
+
+.action-card-description {
+  color: var(--gray);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.action-card-badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: var(--warning);
+  color: var(--gray-dark);
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+

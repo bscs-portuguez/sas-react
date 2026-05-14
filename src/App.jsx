@@ -18,6 +18,7 @@ import ISGDistributionPage from "./pages/ISGDistributionPage";
 import ProfilePage from "./pages/ProfilePage";
 import ReviewPage from "./pages/ReviewPage";
 import LoadingScreen from "./components/LoadingScreen";
+import Chatbot from "./components/Chatbot/Chatbot";
 import "./App.css";
 
 function App() {
@@ -151,102 +152,67 @@ function App() {
     );
   }
 
-  if (userRole === "Admin") {
+  const isAdmin = userRole === "Admin";
+
+  let pageElement;
+  if (isAdmin) {
     switch (adminPage) {
       case "activity-proposals":
-        return (
-          <div className="App">
-            <AdminActivityProposals />
-          </div>
-        );
+        pageElement = <AdminActivityProposals />;
+        break;
       case "account-management":
-        return (
-          <div className="App">
-            <AdminAccountManagement />
-          </div>
-        );
+        pageElement = <AdminAccountManagement />;
+        break;
       case "equipment-inventory":
-        return (
-          <div className="App">
-            <AdminEquipmentInventory />
-          </div>
-        );
+        pageElement = <AdminEquipmentInventory />;
+        break;
       case "equipment-requests":
-        return (
-          <div className="App">
-            <AdminEquipmentRequests />
-          </div>
-        );
+        pageElement = <AdminEquipmentRequests />;
+        break;
       case "profile":
-        return (
-          <div className="App">
-            <AdminProfilePage />
-          </div>
-        );
+        pageElement = <AdminProfilePage />;
+        break;
       case "dashboard":
       default:
-        return (
-          <div className="App">
-            <AdminDashboard />
-          </div>
-        );
+        pageElement = <AdminDashboard />;
+        break;
     }
-  }
-
-  if (!hasOrgInfo) {
+  } else if (!hasOrgInfo) {
     return (
       <div className="App">
         <AuthPage />
       </div>
     );
+  } else {
+    switch (currentPage) {
+      case "activity-proposals":
+        pageElement = <ActivityProposalsPage />;
+        break;
+      case "equipment-borrowing":
+        pageElement = <EquipmentBorrowingPage />;
+        break;
+      case "isg-endorsement":
+        pageElement = <ISGEndorsementPage />;
+        break;
+      case "isg-distribution":
+        pageElement = <ISGDistributionPage />;
+        break;
+      case "profile":
+        pageElement = <ProfilePage />;
+        break;
+      case "home":
+      default:
+        pageElement = orgType === "ISG" ? <ISGEndorsementPage /> : <HomePage />;
+        break;
+    }
   }
 
-  switch (currentPage) {
-    case "activity-proposals":
-      return (
-        <div className="App">
-          <ActivityProposalsPage />
-        </div>
-      );
-    case "equipment-borrowing":
-      return (
-        <div className="App">
-          <EquipmentBorrowingPage />
-        </div>
-      );
-    case "isg-endorsement":
-      return (
-        <div className="App">
-          <ISGEndorsementPage />
-        </div>
-      );
-    case "isg-distribution":
-      return (
-        <div className="App">
-          <ISGDistributionPage />
-        </div>
-      );
-    case "profile":
-      return (
-        <div className="App">
-          <ProfilePage />
-        </div>
-      );
-    case "home":
-    default:
-      if (orgType === "ISG") {
-        return (
-          <div className="App">
-            <ISGEndorsementPage />
-          </div>
-        );
-      }
-      return (
-        <div className="App">
-          <HomePage />
-        </div>
-      );
-  }
+  return (
+    <>
+      <div className="App">{pageElement}</div>
+      <Chatbot user={user} userRole={userRole} orgType={orgType} />
+    </>
+  );
 }
 
 export default App;

@@ -5,8 +5,8 @@ import { getOrganizationById } from "../services/organizationService";
 import { getReleasedOutgoingDocuments } from "../services/documentService";
 import Navbar from "../components/Navbar";
 import DashboardLayout from "../components/DashboardLayout";
-import StatusBanner from "../components/StatusBanner";
 import LoadingScreen from "../components/LoadingScreen";
+import { formatDate, formatDateTime } from "../utils/formatters";
 import "../styles/colors.css";
 import "../styles/home.css";
 import "./HomePage.css";
@@ -15,7 +15,6 @@ const HomePage = () => {
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
   const [organizationData, setOrganizationData] = useState(null);
-  const [verificationStatus, setVerificationStatus] = useState("pending");
   const [outgoingDocuments, setOutgoingDocuments] = useState([]);
   const [activeTab, setActiveTab] = useState("memorandums"); // "memorandums" | "announcements"
   const [selectedDocument, setSelectedDocument] = useState(null);
@@ -29,10 +28,6 @@ const HomePage = () => {
       const userDoc = await getUserById(user.uid);
       if (userDoc) {
         setUserData(userDoc);
-        
-        // Get verification status (default to "unverified" if not set)
-        const status = userDoc.verificationStatus || "unverified";
-        setVerificationStatus(status);
 
         // Fetch organization data
         if (userDoc.organizationId) {
@@ -57,32 +52,6 @@ const HomePage = () => {
     fetchUserData();
   }, []);
 
-  const formatDate = (timestamp) => {
-    if (!timestamp) return "N/A";
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric"
-      });
-    }
-    return "N/A";
-  };
-
-  const formatDateTime = (timestamp) => {
-    if (!timestamp) return "N/A";
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    }
-    return "N/A";
-  };
-
   // Filter documents by active tab
   const filteredDocuments = outgoingDocuments.filter((doc) => {
     if (activeTab === "memorandums") {
@@ -99,7 +68,6 @@ const HomePage = () => {
   const role = userData?.role || "ISG";
   const userRole = userData?.userRole || "";
   const userName = userData?.fullName || auth.currentUser?.email || "User";
-  const isVerified = verificationStatus === "verified";
 
   return (
     <div className="home-container">
@@ -107,7 +75,6 @@ const HomePage = () => {
         organizationName={organizationName}
         role={role}
         userRole={userRole}
-        verificationStatus={verificationStatus}
         userName={userName}
       />
       
@@ -116,9 +83,6 @@ const HomePage = () => {
           <LoadingScreen compact={true} />
         ) : (
         <div className="dashboard-content">
-          {/* Status Banner */}
-          <StatusBanner verificationStatus={verificationStatus} />
-
           {/* Welcome Section */}
           <section className="welcome-section">
             <div className="welcome-header">
@@ -130,40 +94,6 @@ const HomePage = () => {
                 <span className="welcome-org-name">{organizationName}</span>
               </div>
             </div>
-            {verificationStatus === "unverified" && (
-              <div className="welcome-status-message welcome-status-message--unverified">
-                <span className="status-icon">⚪</span>
-                <span>You are an Unverified User.</span>
-                <a 
-                  href="#"
-                  className="verify-account-link"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.dispatchEvent(new CustomEvent("pageNavigate", { detail: "profile" }));
-                  }}
-                >
-                  Verify Account
-                </a>
-              </div>
-            )}
-            {verificationStatus === "pending" && (
-              <div className="welcome-status-message">
-                <span className="status-icon">🟡</span>
-                <span>Your account is under review by SAS.</span>
-              </div>
-            )}
-            {verificationStatus === "verified" && (
-              <div className="welcome-status-message welcome-status-message--verified">
-                <span className="status-icon">🟢</span>
-                <span>Your account is verified. You have full access to all features.</span>
-              </div>
-            )}
-            {verificationStatus === "rejected" && (
-              <div className="welcome-status-message welcome-status-message--rejected">
-                <span className="status-icon">🔴</span>
-                <span>Please update your information or contact SAS for assistance.</span>
-              </div>
-            )}
           </section>
 
           {/* Posts from SAS Section */}

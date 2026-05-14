@@ -29,7 +29,6 @@ const AdminNavbar = ({ userData = null }) => {
     }
   };
 
-  const userName = userData?.fullName || auth.currentUser?.email || "Administrator";
   const userRole = userData?.userRole || "Administrator";
 
   return (
@@ -52,11 +51,6 @@ const AdminNavbar = ({ userData = null }) => {
             <span className="admin-sub-role">({userRole})</span>
           )}
         </div>
-        <div className="admin-notifications">
-          <button className="notification-button" title="Notifications">
-            <Icon name="bell" size={20} className="navbar-icon-white" />
-          </button>
-        </div>
       </div>
 
       <div className="admin-navbar-right">
@@ -67,8 +61,6 @@ const AdminNavbar = ({ userData = null }) => {
             aria-label="User menu"
           >
             <Icon name="profile" size={20} className="admin-user-avatar navbar-icon-white" />
-            <span className="admin-user-name">{userName}</span>
-            <Icon name={showUserMenu ? "chevron-up" : "chevron-down"} size={14} className="admin-menu-arrow navbar-icon-white" />
           </button>
           
           {showUserMenu && (

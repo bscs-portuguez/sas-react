@@ -365,20 +365,35 @@
   border-radius: 8px;
 }
 
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
 .file-download-link {
   color: var(--earist-maroon);
   text-decoration: none;
   font-weight: 500;
-  padding: 0.75rem;
+  padding: 0.6rem 0.75rem;
   background: var(--earist-cream-light);
   border-radius: 8px;
-  display: inline-block;
-  transition: all 0.3s ease;
+  display: block;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
 }
 
 .file-download-link:hover {
   background: var(--earist-maroon);
   color: var(--white);
+}
+
+button.file-download-link {
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
 }
 
 .detail-history-section {

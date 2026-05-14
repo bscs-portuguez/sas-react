@@ -1,10 +1,9 @@
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
+import {
+  doc,
+  setDoc,
+  getDoc,
   deleteDoc,
-  serverTimestamp 
+  serverTimestamp
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 import { sendOTPEmail } from "./emailService";

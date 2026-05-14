@@ -10,7 +10,7 @@ import {
   where,
   getDocs
 } from "firebase/firestore";
-import { updatePassword, updateEmail, deleteUser } from "firebase/auth";
+import { updateEmail, deleteUser } from "firebase/auth";
 import { db, auth } from "../config/firebase";
 
 /**
@@ -36,7 +36,6 @@ export const createUserDocument = async (userId, userData) => {
       organizationId: userData.organizationId,
       userRole: userData.userRole, // User's position/role in organization
       status: "active",
-      verificationStatus: "unverified", // Initial status - user needs to upload documents
       dateCreated: serverTimestamp(),
       lastLogin: null
     });
@@ -44,6 +43,38 @@ export const createUserDocument = async (userId, userData) => {
     console.log("User document created successfully");
   } catch (error) {
     console.error("Error creating user document:", error);
+    throw error;
+  }
+};
+
+/**
+ * Create organization account (admin only)
+ * @param {string} userId - Firebase Auth UID
+ * @param {Object} userData - User data object
+ * @param {string} userData.email - User's email
+ * @param {string} userData.role - "ISG" | "CSG" | "AO" (organization type)
+ * @param {string} userData.organizationId - Organization document ID
+ * @returns {Promise<void>}
+ */
+export const createOrganizationAccount = async (userId, userData) => {
+  try {
+    const userRef = doc(db, "users", userId);
+    
+    await setDoc(userRef, {
+      userId: userId,
+      fullName: userData.organizationName || "Organization Account",
+      email: userData.email,
+      role: userData.role,
+      organizationId: userData.organizationId,
+      userRole: "Officer", // Default role for org accounts
+      status: "active",
+      dateCreated: serverTimestamp(),
+      lastLogin: null
+    });
+    
+    console.log("Organization account created successfully");
+  } catch (error) {
+    console.error("Error creating organization account:", error);
     throw error;
   }
 };
@@ -116,28 +147,6 @@ export const updateLastLogin = async (userId) => {
 };
 
 /**
- * Submit verification document and update status to "pending"
- * @param {string} userId - Firebase Auth UID
- * @param {string} documentUrl - URL of the uploaded verification document
- * @returns {Promise<void>}
- */
-export const submitVerificationDocument = async (userId, documentUrl) => {
-  try {
-    const userRef = doc(db, "users", userId);
-    await updateDoc(userRef, {
-      verificationStatus: "pending",
-      verificationDocumentUrl: documentUrl,
-      verificationSubmittedAt: serverTimestamp(),
-      lastUpdated: serverTimestamp()
-    });
-    console.log(`User ${userId} verification document submitted. Status updated to pending.`);
-  } catch (error) {
-    console.error("Error submitting verification document:", error);
-    throw error;
-  }
-};
-
-/**
  * Update user password
  * @param {string} newPassword - New password
  * @returns {Promise<void>}
@@ -182,6 +191,60 @@ export const updateUserEmail = async (newEmail) => {
     console.log("Email updated successfully");
   } catch (error) {
     console.error("Error updating email:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get all admin/staff user accounts
+ * @returns {Promise<Array>} Array of user objects with role "Admin"
+ */
+export const getAllAdminUsers = async () => {
+  try {
+    const usersRef = collection(db, "users");
+    const querySnapshot = await getDocs(usersRef);
+    const users = [];
+
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data.role === "Admin") {
+        users.push({ userId: docSnap.id, ...data });
+      }
+    });
+
+    users.sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
+    return users;
+  } catch (error) {
+    console.error("Error fetching admin users:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get all non-admin user accounts (org/office accounts)
+ * @returns {Promise<Array>} Array of user objects
+ */
+export const getAllOrgUsers = async () => {
+  try {
+    const usersRef = collection(db, "users");
+    const querySnapshot = await getDocs(usersRef);
+    const users = [];
+
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data.role !== "Admin") {
+        users.push({ userId: docSnap.id, ...data });
+      }
+    });
+
+    users.sort((a, b) => {
+      if (a.role !== b.role) return a.role.localeCompare(b.role);
+      return (a.fullName || "").localeCompare(b.fullName || "");
+    });
+
+    return users;
+  } catch (error) {
+    console.error("Error fetching org users:", error);
     throw error;
   }
 };

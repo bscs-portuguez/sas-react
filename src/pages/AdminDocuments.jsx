@@ -8,10 +8,14 @@ import {
   updateDocumentStatus,
   releaseDocument,
   getDocumentById,
-  getDocumentStatusHistory
+  getDocumentStatusHistory,
+  getResponseTypeForIncoming,
+  getOutgoingDocumentsForIncoming
 } from "../services/documentService";
 import AdminLayout from "../components/admin/AdminLayout";
 import LoadingScreen from "../components/LoadingScreen";
+import ResponseDocumentModal from "../components/documents/ResponseDocumentModal";
+import { formatDate, formatDateTime, getStatusBadgeClass, getStatusLabel } from "../utils/formatters";
 import "../styles/colors.css";
 import "./AdminDocuments.css";
 
@@ -22,7 +26,7 @@ const AdminDocuments = () => {
   const [enrichedDocuments, setEnrichedDocuments] = useState([]);
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [selectedDocumentHistory, setSelectedDocumentHistory] = useState([]);
-  const [currentDirection, setCurrentDirection] = useState("incoming");
+  const currentDirection = "incoming";
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -40,6 +44,11 @@ const AdminDocuments = () => {
   const [documentNumber, setDocumentNumber] = useState("");
   const [statusRemarks, setStatusRemarks] = useState("");
   const [newStatus, setNewStatus] = useState("");
+
+  // Response document modal states
+  const [showResponseModal, setShowResponseModal] = useState(false);
+  const [generateResponse, setGenerateResponse] = useState(false);
+  const [linkedOutgoingDocs, setLinkedOutgoingDocs] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -60,6 +69,7 @@ const AdminDocuments = () => {
     };
 
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load organizations when org type filter changes
@@ -94,6 +104,7 @@ const AdminDocuments = () => {
     }, searchTitle ? 500 : 0); // Debounce search input by 500ms
 
     return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTitle, filterDocumentType, filterOrgType, filterOrgName, currentDirection]);
 
   const loadDocuments = async (direction) => {
@@ -168,19 +179,6 @@ const AdminDocuments = () => {
     return enriched;
   };
 
-  const handleDirectionChange = (direction) => {
-    setCurrentDirection(direction);
-    // Reset filters when switching directions
-    if (direction === "outgoing") {
-      setSearchTitle("");
-      setFilterDocumentType("");
-      setFilterOrgType("");
-      setFilterOrgName("");
-    }
-    loadDocuments(direction);
-    setSelectedDocument(null);
-  };
-
   const handleAssignNumber = async () => {
     if (!selectedDocument || !documentNumber.trim()) {
       setError("Please enter a document number");
@@ -212,6 +210,13 @@ const AdminDocuments = () => {
       return;
     }
 
+    // If approving an incoming document and generateResponse is checked, show response modal
+    if (newStatus === "approved" && generateResponse && currentDirection === "incoming") {
+      setShowStatusModal(false);
+      setShowResponseModal(true);
+      return;
+    }
+
     try {
       setLoading(true);
       setError("");
@@ -219,16 +224,45 @@ const AdminDocuments = () => {
         selectedDocument.documentId,
         newStatus,
         statusRemarks,
-        auth.currentUser.uid
+        auth.currentUser.uid,
+        false,
+        null
       );
       setSuccess(`Document status updated to ${newStatus}`);
       setShowStatusModal(false);
       setNewStatus("");
       setStatusRemarks("");
+      setGenerateResponse(false);
       await loadDocuments(currentDirection);
     } catch (error) {
       setError(error.message || "Failed to update status");
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResponseSubmit = async (responseData) => {
+    try {
+      setLoading(true);
+      setError("");
+      
+      await updateDocumentStatus(
+        selectedDocument.documentId,
+        "approved",
+        statusRemarks,
+        auth.currentUser.uid,
+        true,
+        responseData
+      );
+      
+      setSuccess(`Document approved and ${getResponseTypeForIncoming(selectedDocument.documentType).label} created successfully`);
+      setShowResponseModal(false);
+      setNewStatus("");
+      setStatusRemarks("");
+      setGenerateResponse(false);
+      await loadDocuments(currentDirection);
+    } catch (error) {
+      setError(error.message || "Failed to create response document");
       setLoading(false);
     }
   };
@@ -283,6 +317,14 @@ const AdminDocuments = () => {
       );
       setSelectedDocumentHistory(enrichedHistory);
       
+      // Fetch linked outgoing documents if this is an incoming document
+      if (doc.direction === "incoming") {
+        const outgoingDocs = await getOutgoingDocumentsForIncoming(documentId);
+        setLinkedOutgoingDocs(outgoingDocs);
+      } else {
+        setLinkedOutgoingDocs([]);
+      }
+      
       setShowDetailModal(true);
     } catch (error) {
       console.error("Error loading document details:", error);
@@ -290,56 +332,6 @@ const AdminDocuments = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getStatusBadgeClass = (status) => {
-    const statusClasses = {
-      pending: "status-badge-pending",
-      under_review: "status-badge-review",
-      approved: "status-badge-approved",
-      returned: "status-badge-returned",
-      rejected: "status-badge-rejected",
-      released: "status-badge-released"
-    };
-    return statusClasses[status] || "status-badge-default";
-  };
-
-  const getStatusLabel = (status) => {
-    const statusLabels = {
-      pending: "Pending",
-      under_review: "Under Review",
-      approved: "Approved",
-      returned: "Returned",
-      rejected: "Rejected",
-      released: "Released"
-    };
-    return statusLabels[status] || status;
-  };
-
-  const formatDate = (timestamp) => {
-    if (!timestamp) return "N/A";
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric"
-      });
-    }
-    return "N/A";
-  };
-
-  const formatDateTime = (timestamp) => {
-    if (!timestamp) return "N/A";
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    }
-    return "N/A";
   };
 
   return (
@@ -575,6 +567,26 @@ const AdminDocuments = () => {
                   placeholder="Enter remarks (optional)"
                 />
               </div>
+              
+              {/* Generate Response Document Option - Only for incoming documents when approving */}
+              {currentDirection === "incoming" && newStatus === "approved" && selectedDocument && (
+                <div className="form-group generate-response-section">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={generateResponse}
+                      onChange={(e) => setGenerateResponse(e.target.checked)}
+                    />
+                    <span className="checkbox-text">
+                      Generate {getResponseTypeForIncoming(selectedDocument.documentType).label}
+                    </span>
+                  </label>
+                  <span className="form-hint">
+                    Create an outgoing response document linked to this approval
+                  </span>
+                </div>
+              )}
+              
               <div className="modal-actions">
                 <button className="form-button form-button-secondary" onClick={() => setShowStatusModal(false)}>
                   Cancel
@@ -658,6 +670,49 @@ const AdminDocuments = () => {
                   )}
                 </div>
 
+                {/* Linked Outgoing Documents Section */}
+                {selectedDocument.direction === "incoming" && (
+                  <div className="detail-linked-documents-section">
+                    <h4 className="linked-documents-title">Response Documents</h4>
+                    {linkedOutgoingDocs.length === 0 ? (
+                      <div className="linked-documents-empty">
+                        {selectedDocument.status === "approved" ? (
+                          <span className="hint">No response document created yet</span>
+                        ) : (
+                          <span className="hint">Will be available after approval</span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="linked-documents-list">
+                        {linkedOutgoingDocs.map((doc) => (
+                          <div key={doc.documentId} className="linked-document-card">
+                            <div className="linked-doc-header">
+                              <span className={`status-badge ${getStatusBadgeClass(doc.status)}`}>
+                                {getStatusLabel(doc.status)}
+                              </span>
+                              <span className="linked-doc-type">{doc.documentType.replace(/_/g, " ")}</span>
+                            </div>
+                            <div className="linked-doc-title">{doc.title}</div>
+                            {doc.documentNumber && (
+                              <div className="linked-doc-number">{doc.documentNumber}</div>
+                            )}
+                            {doc.fileUrl && (
+                              <a
+                                href={doc.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="linked-doc-download"
+                              >
+                                📄 Download Response
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Status History Section */}
                 <div className="detail-history-section">
                   <h4 className="history-section-title">Status History</h4>
@@ -697,6 +752,19 @@ const AdminDocuments = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Response Document Modal */}
+        {showResponseModal && selectedDocument && (
+          <ResponseDocumentModal
+            incomingDocument={selectedDocument}
+            onSubmit={handleResponseSubmit}
+            onCancel={() => {
+              setShowResponseModal(false);
+              setGenerateResponse(false);
+            }}
+            isProcessing={loading}
+          />
         )}
       </div>
       )}

@@ -1,0 +1,747 @@
+.admin-account-management {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Header */
+.acct-mgmt-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  gap: 1rem;
+}
+
+.acct-mgmt-title {
+  color: var(--earist-maroon);
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem 0;
+}
+
+.acct-mgmt-subtitle {
+  color: var(--gray);
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.acct-create-btn {
+  background: var(--earist-maroon);
+  color: var(--white);
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.acct-create-btn:hover {
+  background: var(--earist-maroon-dark);
+}
+
+/* Success Banner */
+.acct-success-banner {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+  border-radius: 8px;
+  padding: 0.875rem 1.25rem;
+  margin-bottom: 1.5rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Controls */
+.acct-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.acct-type-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.acct-tab {
+  padding: 0.5rem 1.25rem;
+  border: 2px solid var(--gray-light);
+  border-radius: 24px;
+  background: var(--white);
+  color: var(--gray-dark);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.acct-tab:hover {
+  border-color: var(--earist-maroon);
+  color: var(--earist-maroon);
+}
+
+.acct-tab.active {
+  background: var(--earist-maroon);
+  border-color: var(--earist-maroon);
+  color: var(--white);
+  font-weight: 600;
+}
+
+.acct-search {
+  padding: 0.625rem 1rem;
+  border: 1.5px solid var(--gray-light);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  min-width: 280px;
+  transition: border-color 0.2s ease;
+  background: var(--white);
+}
+
+.acct-search:focus {
+  outline: none;
+  border-color: var(--earist-maroon);
+}
+
+/* Table */
+.acct-table-wrapper {
+  background: var(--white);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow-x: auto;
+}
+
+.acct-empty {
+  padding: 3rem;
+  text-align: center;
+  color: var(--gray);
+  font-size: 1rem;
+}
+
+.acct-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.acct-table thead th {
+  background: var(--earist-cream);
+  color: var(--earist-maroon);
+  font-weight: 600;
+  padding: 1rem 1.25rem;
+  text-align: left;
+  border-bottom: 2px solid var(--gray-light);
+  white-space: nowrap;
+}
+
+.acct-table tbody tr {
+  border-bottom: 1px solid var(--gray-light);
+  transition: background 0.15s ease;
+}
+
+.acct-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.acct-table tbody tr:hover {
+  background: var(--earist-cream-light, #fafaf5);
+}
+
+.acct-table tbody tr.row-inactive {
+  opacity: 0.6;
+}
+
+.acct-table td {
+  padding: 0.875rem 1.25rem;
+  color: var(--gray-dark);
+  vertical-align: middle;
+}
+
+.acct-email-cell {
+  font-size: 0.85rem;
+  color: var(--gray);
+}
+
+/* Role Badge */
+.acct-role-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.acct-role-admin {
+  background: #fce4ec;
+  color: #880e4f;
+}
+
+.acct-role-isg {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.acct-role-csg {
+  background: #f3e5f5;
+  color: #6a1b9a;
+}
+
+.acct-role-ao {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+/* Status Badge */
+.acct-status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.acct-status-active {
+  background: #d4edda;
+  color: #155724;
+}
+
+.acct-status-inactive {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* Actions */
+.acct-actions-cell {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.acct-action-btn {
+  padding: 0.375rem 0.875rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+}
+
+.acct-action-btn:hover {
+  opacity: 0.85;
+}
+
+.acct-reset-btn {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffc107;
+}
+
+.acct-deactivate-btn {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.acct-activate-btn {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+/* Modal Overlay */
+.acct-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.acct-modal {
+  background: var(--white);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.acct-modal-sm {
+  max-width: 440px;
+}
+
+.acct-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 1.75rem 1rem;
+  border-bottom: 1px solid var(--gray-light);
+}
+
+.acct-modal-header h2 {
+  color: var(--earist-maroon);
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.acct-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: var(--gray);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease;
+}
+
+.acct-modal-close:hover {
+  color: var(--earist-maroon);
+}
+
+.acct-modal-body {
+  padding: 1.5rem 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.acct-modal-footer {
+  padding: 1rem 1.75rem 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  border-top: 1px solid var(--gray-light);
+}
+
+/* Form Elements */
+.acct-form-error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+}
+
+.acct-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.acct-form-group label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-dark);
+}
+
+.acct-form-group input[type="text"],
+.acct-form-group input[type="email"],
+.acct-form-group input[type="password"],
+.acct-form-group select {
+  padding: 0.625rem 0.875rem;
+  border: 1.5px solid var(--gray-light);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: var(--white);
+  color: var(--gray-dark);
+  transition: border-color 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.acct-form-group input:focus,
+.acct-form-group select:focus {
+  outline: none;
+  border-color: var(--earist-maroon);
+}
+
+.acct-form-group small {
+  font-size: 0.78rem;
+  color: var(--gray);
+}
+
+.acct-radio-group {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.acct-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--gray-dark);
+}
+
+.acct-radio-label input[type="radio"] {
+  accent-color: var(--earist-maroon);
+  width: 16px;
+  height: 16px;
+}
+
+.acct-checkbox-group {
+  margin-top: 0.25rem;
+}
+
+.acct-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--gray-dark);
+}
+
+.acct-checkbox-label input[type="checkbox"] {
+  accent-color: var(--earist-maroon);
+  width: 16px;
+  height: 16px;
+}
+
+/* Password Row */
+.acct-password-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.acct-password-row input {
+  flex: 1;
+}
+
+.acct-pw-toggle,
+.acct-pw-generate {
+  padding: 0.5rem 0.875rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.acct-pw-toggle {
+  background: var(--white);
+  border: 1.5px solid var(--gray-light);
+  color: var(--gray-dark);
+}
+
+.acct-pw-toggle:hover {
+  border-color: var(--earist-maroon);
+  color: var(--earist-maroon);
+}
+
+.acct-pw-generate {
+  background: var(--earist-maroon);
+  border: 1.5px solid var(--earist-maroon);
+  color: var(--white);
+}
+
+.acct-pw-generate:hover {
+  background: var(--earist-maroon-dark);
+  border-color: var(--earist-maroon-dark);
+}
+
+/* Reset modal info */
+.acct-reset-name {
+  color: var(--gray-dark);
+  font-size: 1rem;
+  margin: 0 0 0.25rem 0;
+}
+
+.acct-reset-email {
+  color: var(--gray);
+  font-size: 0.875rem;
+  margin: 0 0 0.5rem 0;
+}
+
+/* Buttons */
+.acct-btn-primary {
+  background: var(--earist-maroon);
+  color: var(--white);
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.acct-btn-primary:hover:not(:disabled) {
+  background: var(--earist-maroon-dark);
+}
+
+.acct-btn-primary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.acct-btn-secondary {
+  background: var(--white);
+  color: var(--earist-maroon);
+  border: 2px solid var(--earist-maroon);
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.acct-btn-secondary:hover {
+  background: var(--earist-maroon);
+  color: var(--white);
+}
+
+/* ── Office Profiles Section ─────────────────────────────────────────────── */
+
+.office-profiles-section {
+  margin-bottom: 0;
+}
+
+.office-profiles-heading {
+  color: var(--earist-maroon);
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0 0 0.3rem 0;
+}
+
+.office-profiles-subheading {
+  color: var(--gray);
+  font-size: 0.9rem;
+  margin: 0 0 1.25rem 0;
+}
+
+.office-profiles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.25rem;
+}
+
+.office-profile-card {
+  background: var(--white);
+  border-radius: 12px;
+  border: 2px solid var(--gray-light);
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.office-profile-card.configured {
+  border-color: #c3e6cb;
+}
+
+.office-profile-card.unconfigured {
+  border-color: #ffc107;
+  background: #fffdf0;
+}
+
+.office-profile-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.office-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--earist-maroon);
+  color: var(--white);
+  border-radius: 8px;
+  padding: 0.2rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  align-self: flex-start;
+}
+
+.office-profile-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.office-profile-name {
+  color: var(--gray-dark);
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.office-profile-description {
+  color: var(--gray);
+  font-size: 0.82rem;
+  margin: 0 0 0.4rem 0;
+}
+
+.office-profile-email {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #155724;
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.office-email-icon {
+  font-size: 0.9rem;
+}
+
+.office-profile-unconfigured {
+  color: #856404;
+  font-size: 0.85rem;
+  font-style: italic;
+  margin: 0;
+}
+
+.office-profile-edit-btn {
+  background: var(--white);
+  border: 2px solid var(--earist-maroon);
+  color: var(--earist-maroon);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  align-self: flex-start;
+}
+
+.office-profile-edit-btn:hover {
+  background: var(--earist-maroon);
+  color: var(--white);
+}
+
+/* Section divider */
+.acct-section-divider {
+  border: none;
+  border-top: 2px solid var(--gray-light);
+  margin: 2rem 0 1.5rem;
+}
+
+.acct-section-heading {
+  color: var(--earist-maroon);
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0 0 1.25rem 0;
+}
+
+/* "(you)" label next to own account */
+.acct-you-badge {
+  font-size: 0.75rem;
+  color: var(--gray);
+  font-weight: 400;
+}
+
+/* Category toggle in create modal */
+.acct-category-toggle {
+  display: flex;
+  border: 1.5px solid var(--gray-light);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.acct-category-btn {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  border: none;
+  background: var(--white);
+  color: var(--gray-dark);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.acct-category-btn:not(:last-child) {
+  border-right: 1.5px solid var(--gray-light);
+}
+
+.acct-category-btn.active {
+  background: var(--earist-maroon);
+  color: var(--white);
+  font-weight: 600;
+}
+
+.acct-category-btn:not(.active):hover {
+  background: var(--earist-cream);
+  color: var(--earist-maroon);
+}
+
+/* Disabled action buttons */
+.acct-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Office modal hint */
+.office-modal-hint {
+  color: var(--gray);
+  font-size: 0.88rem;
+  margin: 0 0 0.5rem 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .acct-mgmt-title {
+    font-size: 1.75rem;
+  }
+
+  .acct-mgmt-header {
+    flex-direction: column;
+  }
+
+  .acct-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .acct-search {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .acct-type-tabs {
+    flex-wrap: wrap;
+  }
+
+  .acct-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .acct-actions-cell {
+    flex-direction: column;
+  }
+
+  .office-profiles-grid {
+    grid-template-columns: 1fr;
+  }
+}

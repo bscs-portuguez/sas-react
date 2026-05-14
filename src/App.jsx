@@ -2,31 +2,28 @@ import { useState, useEffect, useRef } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./config/firebase";
 import { getUserById, updateLastLogin } from "./services/userService";
+import { getOrganizationById } from "./services/organizationService";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import AdminDashboard from "./pages/AdminDashboard";
-import AdminUsers from "./pages/AdminUsers";
-import AdminOrganizations from "./pages/AdminOrganizations";
-import AdminDocuments from "./pages/AdminDocuments";
 import AdminActivityProposals from "./pages/AdminActivityProposals";
-import AdminReportsCompliance from "./pages/AdminReportsCompliance";
-import AdminOutgoingDocuments from "./pages/AdminOutgoingDocuments";
-import AdminEquipmentManagement from "./pages/AdminEquipmentManagement";
-import AdminNotificationsDeadlines from "./pages/AdminNotificationsDeadlines";
-import AdminReportsAnalytics from "./pages/AdminReportsAnalytics";
-import AdminSystemSettings from "./pages/AdminSystemSettings";
 import AdminProfilePage from "./pages/AdminProfilePage";
-import DocumentsPage from "./pages/DocumentsPage";
-import ActivityProposalsPage from "./pages/ActivityProposalsPage";
-import ReportsCompliancePage from "./pages/ReportsCompliancePage";
-import ReferencesDownloadsPage from "./pages/ReferencesDownloadsPage";
-import ProfilePage from "./pages/ProfilePage";
+import AdminAccountManagement from "./pages/AdminAccountManagement";
+import AdminEquipmentInventory from "./pages/AdminEquipmentInventory";
+import AdminEquipmentRequests from "./pages/AdminEquipmentRequests";
 import EquipmentBorrowingPage from "./pages/EquipmentBorrowingPage";
-import NotificationsPage from "./pages/NotificationsPage";
+import ActivityProposalsPage from "./pages/ActivityProposalsPage";
+import ISGEndorsementPage from "./pages/ISGEndorsementPage";
+import ISGDistributionPage from "./pages/ISGDistributionPage";
+import ProfilePage from "./pages/ProfilePage";
+import ReviewPage from "./pages/ReviewPage";
 import LoadingScreen from "./components/LoadingScreen";
 import "./App.css";
 
 function App() {
+  const isReviewRoute =
+    typeof window !== "undefined" && window.location.pathname === "/review";
+
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState(null);
@@ -38,9 +35,8 @@ function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      
+
       if (currentUser) {
-        // Update lastLogin timestamp for this user (only once per session)
         if (!lastLoginUpdatedRef.current.has(currentUser.uid)) {
           lastLoginUpdatedRef.current.add(currentUser.uid);
           updateLastLogin(currentUser.uid).catch(error => {
@@ -48,7 +44,6 @@ function App() {
           });
         }
 
-        // Fetch user document to determine role and check organization info
         setCheckingRole(true);
         try {
           const userDoc = await getUserById(currentUser.uid);
@@ -65,7 +60,6 @@ function App() {
           setLoading(false);
         }
       } else {
-        // Clear the lastLoginUpdated set when user logs out
         lastLoginUpdatedRef.current.clear();
         setUserRole(null);
         setLoading(false);
@@ -75,9 +69,9 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // Check if user has organization info
   const [hasOrgInfo, setHasOrgInfo] = useState(false);
   const [checkingOrgInfo, setCheckingOrgInfo] = useState(false);
+  const [orgType, setOrgType] = useState(null);
 
   useEffect(() => {
     const checkOrgInfo = async () => {
@@ -85,31 +79,34 @@ function App() {
         setCheckingOrgInfo(true);
         try {
           const userDoc = await getUserById(user.uid);
-          // All three fields must exist and not be empty
           const hasOrgId = userDoc?.organizationId && userDoc.organizationId.trim() !== "";
           const hasRole = userDoc?.role && userDoc.role.trim() !== "";
           const hasUserRole = userDoc?.userRole && userDoc.userRole.trim() !== "";
-          
+
           if (userDoc && hasOrgId && hasRole && hasUserRole) {
             setHasOrgInfo(true);
+            const orgDoc = await getOrganizationById(userDoc.organizationId);
+            setOrgType(orgDoc?.type || null);
           } else {
             setHasOrgInfo(false);
+            setOrgType(null);
           }
         } catch (error) {
           console.error("Error checking user org info:", error);
           setHasOrgInfo(false);
+          setOrgType(null);
         } finally {
           setCheckingOrgInfo(false);
         }
       } else {
         setHasOrgInfo(false);
+        setOrgType(null);
       }
     };
-    
+
     checkOrgInfo();
   }, [user]);
 
-  // Handle admin page navigation via window events
   useEffect(() => {
     const handleAdminNavigate = (event) => {
       if (event.detail && typeof event.detail === "string") {
@@ -121,7 +118,6 @@ function App() {
     return () => window.removeEventListener("adminNavigate", handleAdminNavigate);
   }, []);
 
-  // Handle regular user page navigation via window events
   useEffect(() => {
     const handlePageNavigate = (event) => {
       if (event.detail && typeof event.detail === "string") {
@@ -133,18 +129,20 @@ function App() {
     return () => window.removeEventListener("pageNavigate", handlePageNavigate);
   }, []);
 
-  // Check if OTP verification is in progress
-  // If so, stay on AuthPage even if user is briefly authenticated (brief sign-in for validation)
-  // This includes both login and registration OTP flows
   const otpInProgress = sessionStorage.getItem("pendingAuth") !== null;
+
+  if (isReviewRoute) {
+    return (
+      <div className="App">
+        <ReviewPage />
+      </div>
+    );
+  }
 
   if (loading || checkingRole || checkingOrgInfo) {
     return <LoadingScreen />;
   }
 
-  // Determine which page to show based on authentication and role
-  // For admins, skip organization info check
-  // For regular users, show AuthPage if: no user, OTP in progress, or user doesn't have organization info
   if (!user || otpInProgress) {
     return (
       <div className="App">
@@ -153,68 +151,30 @@ function App() {
     );
   }
 
-  // Role-based routing: Admin goes to Admin pages, others go to HomePage
   if (userRole === "Admin") {
-    // Render appropriate admin page based on adminPage state
     switch (adminPage) {
-      case "users":
-        return (
-          <div className="App">
-            <AdminUsers />
-          </div>
-        );
-      case "organizations":
-        return (
-          <div className="App">
-            <AdminOrganizations />
-          </div>
-        );
-      case "documents":
-        return (
-          <div className="App">
-            <AdminDocuments />
-          </div>
-        );
       case "activity-proposals":
         return (
           <div className="App">
             <AdminActivityProposals />
           </div>
         );
-      case "reports-compliance":
+      case "account-management":
         return (
           <div className="App">
-            <AdminReportsCompliance />
+            <AdminAccountManagement />
           </div>
         );
-      case "outgoing-documents":
+      case "equipment-inventory":
         return (
           <div className="App">
-            <AdminOutgoingDocuments />
+            <AdminEquipmentInventory />
           </div>
         );
-      case "equipment":
+      case "equipment-requests":
         return (
           <div className="App">
-            <AdminEquipmentManagement />
-          </div>
-        );
-      case "notifications-deadlines":
-        return (
-          <div className="App">
-            <AdminNotificationsDeadlines />
-          </div>
-        );
-      case "reports-analytics":
-        return (
-          <div className="App">
-            <AdminReportsAnalytics />
-          </div>
-        );
-      case "settings":
-        return (
-          <div className="App">
-            <AdminSystemSettings />
+            <AdminEquipmentRequests />
           </div>
         );
       case "profile":
@@ -233,7 +193,6 @@ function App() {
     }
   }
 
-  // Regular users need organization info
   if (!hasOrgInfo) {
     return (
       <div className="App">
@@ -242,30 +201,29 @@ function App() {
     );
   }
 
-  // Regular users - render appropriate page
   switch (currentPage) {
-    case "documents":
-      return (
-        <div className="App">
-          <DocumentsPage />
-        </div>
-      );
     case "activity-proposals":
       return (
         <div className="App">
           <ActivityProposalsPage />
         </div>
       );
-    case "reports":
+    case "equipment-borrowing":
       return (
         <div className="App">
-          <ReportsCompliancePage />
+          <EquipmentBorrowingPage />
         </div>
       );
-    case "references":
+    case "isg-endorsement":
       return (
         <div className="App">
-          <ReferencesDownloadsPage />
+          <ISGEndorsementPage />
+        </div>
+      );
+    case "isg-distribution":
+      return (
+        <div className="App">
+          <ISGDistributionPage />
         </div>
       );
     case "profile":
@@ -274,20 +232,15 @@ function App() {
           <ProfilePage />
         </div>
       );
-    case "equipment":
-      return (
-        <div className="App">
-          <EquipmentBorrowingPage />
-        </div>
-      );
-    case "notifications":
-      return (
-        <div className="App">
-          <NotificationsPage />
-        </div>
-      );
     case "home":
     default:
+      if (orgType === "ISG") {
+        return (
+          <div className="App">
+            <ISGEndorsementPage />
+          </div>
+        );
+      }
       return (
         <div className="App">
           <HomePage />

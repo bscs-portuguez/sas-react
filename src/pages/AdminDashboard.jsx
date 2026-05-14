@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { auth } from "../config/firebase";
 import { getUserById } from "../services/userService";
-import { getDashboardStats, getRecentActivity } from "../services/adminService";
+import { getDashboardStats } from "../services/adminService";
 import AdminLayout from "../components/admin/AdminLayout";
 import StatsCard from "../components/admin/StatsCard";
 import VerificationQueue from "../components/admin/VerificationQueue";
@@ -13,44 +13,31 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
   const [stats, setStats] = useState(null);
-  const [recentActivity, setRecentActivity] = useState([]);
   const [currentView, setCurrentView] = useState("overview");
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const user = auth.currentUser;
-
         if (!user) return;
 
-        // Fetch admin user data
         const userDoc = await getUserById(user.uid);
         if (userDoc) {
           setUserData(userDoc);
-          
-          // Check if user is actually an admin
+
           if (userDoc.role !== "Admin") {
-            // Redirect to user dashboard - this shouldn't happen due to App.jsx routing
-            // but adding as safety check
             console.warn("Non-admin user accessed admin dashboard");
             return;
           }
 
-          // Check if admin account is active
           if (userDoc.status !== "active") {
-            // Show blocked message
             setLoading(false);
             return;
           }
         }
 
-        // Fetch dashboard statistics
         const dashboardStats = await getDashboardStats();
         setStats(dashboardStats);
-
-        // Fetch recent activity
-        const activity = await getRecentActivity();
-        setRecentActivity(activity);
       } catch (error) {
         console.error("Error fetching admin data:", error);
       } finally {
@@ -61,7 +48,6 @@ const AdminDashboard = () => {
     fetchData();
   }, []);
 
-  // Check if admin account is inactive
   if (userData && userData.status !== "active") {
     return (
       <div className="admin-dashboard-blocked">
@@ -73,7 +59,6 @@ const AdminDashboard = () => {
     );
   }
 
-  // Check if user is not admin (safety check)
   if (userData && userData.role !== "Admin") {
     return (
       <div className="admin-dashboard-blocked">
@@ -93,90 +78,49 @@ const AdminDashboard = () => {
       <div className="admin-dashboard">
         {currentView === "overview" && (
           <>
-            {/* Dashboard Header */}
             <div className="admin-dashboard-header">
               <h1 className="admin-dashboard-title">Admin Dashboard</h1>
-              <p className="admin-dashboard-subtitle">System Overview & Management</p>
+              <p className="admin-dashboard-subtitle">System Overview</p>
             </div>
 
-            {/* Statistics Cards */}
             {stats && (
-              <>
-                <section className="admin-stats-section">
-                  <h2 className="section-title">Overview</h2>
-                  <div className="stats-grid">
-                    <StatsCard
-                      title="Pending Proposals"
-                      value={stats.pendingProposals || 0}
-                      icon="📝"
-                      color="warning"
-                      onClick={() => {
-                        window.dispatchEvent(new CustomEvent("adminNavigate", { detail: "activity-proposals" }));
-                      }}
-                    />
-                    <StatsCard
-                      title="Late Reports"
-                      value={stats.lateReports || 0}
-                      icon="📊"
-                      color="error"
-                      onClick={() => {
-                        window.dispatchEvent(new CustomEvent("adminNavigate", { detail: "reports-compliance" }));
-                      }}
-                    />
-                    <StatsCard
-                      title="Overdue Equipment"
-                      value={stats.overdueEquipment || 0}
-                      icon="🔧"
-                      color="error"
-                      onClick={() => {
-                        window.dispatchEvent(new CustomEvent("adminNavigate", { detail: "equipment" }));
-                      }}
-                    />
-                    <StatsCard
-                      title="Incoming Documents"
-                      value={stats.incomingDocuments || 0}
-                      icon="📥"
-                      color="info"
-                      onClick={() => {
-                        window.dispatchEvent(new CustomEvent("adminNavigate", { detail: "documents" }));
-                      }}
-                    />
-                  </div>
-                </section>
-
-                <section className="admin-stats-section">
-                  <h2 className="section-title">System Statistics</h2>
-                  <div className="stats-grid">
-                    <StatsCard
-                      title="Total Users"
-                      value={stats.totalUsers}
-                      icon="👥"
-                      color="maroon"
-                    />
-                    <StatsCard
-                      title="Pending Verifications"
-                      value={stats.pendingVerifications}
-                      icon="⏳"
-                      color="warning"
-                    />
-                    <StatsCard
-                      title="Verified Users"
-                      value={stats.verifiedUsers}
-                      icon="✅"
-                      color="success"
-                    />
-                    <StatsCard
-                      title="Active Organizations"
-                      value={stats.activeOrganizations}
-                      icon="🏢"
-                      color="info"
-                    />
-                  </div>
-                </section>
-              </>
+              <section className="admin-stats-section">
+                <h2 className="section-title">Overview</h2>
+                <div className="stats-grid">
+                  <StatsCard
+                    title="Pending Proposals"
+                    value={stats.pendingProposals || 0}
+                    icon="📝"
+                    color="warning"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent("adminNavigate", { detail: "activity-proposals" }));
+                    }}
+                  />
+                  <StatsCard
+                    title="Total Accounts"
+                    value={(stats.totalUsers || 0) - (stats.adminUsers || 0)}
+                    icon="👥"
+                    color="info"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent("adminNavigate", { detail: "account-management" }));
+                    }}
+                  />
+                  <StatsCard
+                    title="Pending Verifications"
+                    value={stats.pendingVerifications}
+                    icon="⏳"
+                    color="warning"
+                  />
+                  <StatsCard
+                    title="Verified Users"
+                    value={stats.verifiedUsers}
+                    icon="✅"
+                    color="success"
+                  />
+                </div>
+              </section>
             )}
 
-            {/* Quick Actions */}
             <section className="admin-quick-actions">
               <h2 className="section-title">Quick Actions</h2>
               <div className="quick-actions-grid">
@@ -193,53 +137,22 @@ const AdminDashboard = () => {
                 <button
                   className="quick-action-button"
                   onClick={() => {
-                    window.dispatchEvent(new CustomEvent("adminNavigate", { detail: "users" }));
+                    window.dispatchEvent(new CustomEvent("adminNavigate", { detail: "activity-proposals" }));
                   }}
                 >
-                  <span className="quick-action-icon">👥</span>
-                  <span className="quick-action-label">Manage Users</span>
+                  <span className="quick-action-icon">📝</span>
+                  <span className="quick-action-label">Activity Proposals</span>
                 </button>
                 <button
                   className="quick-action-button"
                   onClick={() => {
-                    window.dispatchEvent(new CustomEvent("adminNavigate", { detail: "organizations" }));
+                    window.dispatchEvent(new CustomEvent("adminNavigate", { detail: "account-management" }));
                   }}
                 >
-                  <span className="quick-action-icon">🏢</span>
-                  <span className="quick-action-label">Manage Organizations</span>
-                </button>
-                <button
-                  className="quick-action-button"
-                  onClick={() => console.log("Navigate to announcements")}
-                >
-                  <span className="quick-action-icon">📢</span>
-                  <span className="quick-action-label">Manage Announcements</span>
+                  <span className="quick-action-icon">👥</span>
+                  <span className="quick-action-label">Manage Accounts</span>
                 </button>
               </div>
-            </section>
-
-            {/* Recent Activity */}
-            <section className="admin-recent-activity">
-              <h2 className="section-title">Recent Activity</h2>
-              {recentActivity.length === 0 ? (
-                <div className="activity-empty">
-                  <p>No recent activity to display.</p>
-                </div>
-              ) : (
-                <div className="activity-list">
-                  {recentActivity.slice(0, 10).map((activity, index) => (
-                    <div key={index} className="activity-item">
-                      <div className="activity-icon">📋</div>
-                      <div className="activity-content">
-                        <p className="activity-description">{activity.description}</p>
-                        <span className="activity-time">
-                          {activity.timestamp?.toDate?.()?.toLocaleString() || "Recently"}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </section>
           </>
         )}
@@ -261,8 +174,6 @@ const AdminDashboard = () => {
       )}
     </AdminLayout>
   );
-  
 };
 
 export default AdminDashboard;
-

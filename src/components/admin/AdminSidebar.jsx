@@ -9,14 +9,9 @@ const AdminSidebar = ({ currentPage = "dashboard", onNavigate }) => {
   const menuItems = [
     { id: "dashboard", label: "Dashboard Overview", icon: "dashboard" },
     { id: "activity-proposals", label: "Activity Proposals", icon: "activity-proposals" },
-    { id: "reports-compliance", label: "Reports & Compliance", icon: "reports" },
-    { id: "documents", label: "Incoming Documents", icon: "incoming" },
-    { id: "outgoing-documents", label: "Outgoing Documents", icon: "outgoing" },
-    { id: "equipment", label: "Equipment Management", icon: "equipment-management" },
-    { id: "users", label: "User Accounts", icon: "profile" },
-    { id: "organizations", label: "Organizations", icon: "building" },
-    { id: "reports-analytics", label: "Reports & Analytics", icon: "analytics" },
-    { id: "settings", label: "System Settings", icon: "settings" },
+    { id: "equipment-requests", label: "Equipment Requests", icon: "equipment" },
+    { id: "equipment-inventory", label: "Equipment Inventory", icon: "equipment-management" },
+    { id: "account-management", label: "Account Management", icon: "building" },
   ];
 
   const handleMenuClick = (item) => {

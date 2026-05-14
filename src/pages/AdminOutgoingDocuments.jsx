@@ -11,6 +11,7 @@ import {
 } from "../services/documentService";
 import AdminLayout from "../components/admin/AdminLayout";
 import LoadingScreen from "../components/LoadingScreen";
+import { formatDate, formatDateTime, getStatusBadgeClass, getStatusLabel } from "../utils/formatters";
 import "../styles/colors.css";
 import "./AdminOutgoingDocuments.css";
 
@@ -61,10 +62,12 @@ const AdminOutgoingDocuments = () => {
     };
 
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     loadDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterStatus]);
 
   const loadDocuments = async () => {
@@ -100,7 +103,7 @@ const AdminOutgoingDocuments = () => {
           try {
             const organization = await getOrganizationById(doc.organizationId);
             enrichedDoc.organizationName = organization?.name || doc.organizationId;
-          } catch (error) {
+          } catch {
             enrichedDoc.organizationName = doc.organizationId;
           }
         }
@@ -109,16 +112,16 @@ const AdminOutgoingDocuments = () => {
           try {
             const user = await getUserById(doc.releasedTo);
             enrichedDoc.releasedToName = user?.fullName || user?.email || doc.releasedTo;
-          } catch (error) {
+          } catch {
             enrichedDoc.releasedToName = doc.releasedTo;
           }
         }
-        
+
         if (doc.releasedBy) {
           try {
             const user = await getUserById(doc.releasedBy);
             enrichedDoc.releasedByName = user?.fullName || user?.email || "Unknown";
-          } catch (error) {
+          } catch {
             enrichedDoc.releasedByName = "Unknown";
           }
         }
@@ -148,7 +151,7 @@ const AdminOutgoingDocuments = () => {
                 ...entry,
                 changedByName: user?.fullName || user?.email || "Unknown"
               };
-            } catch (error) {
+            } catch {
               return { ...entry, changedByName: "Unknown" };
             }
           }
@@ -185,56 +188,6 @@ const AdminOutgoingDocuments = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getStatusBadgeClass = (status) => {
-    const statusClasses = {
-      pending: "status-badge-pending",
-      under_review: "status-badge-review",
-      approved: "status-badge-approved",
-      returned: "status-badge-returned",
-      rejected: "status-badge-rejected",
-      released: "status-badge-released"
-    };
-    return statusClasses[status] || "status-badge-default";
-  };
-
-  const getStatusLabel = (status) => {
-    const statusLabels = {
-      pending: "Pending",
-      under_review: "Under Review",
-      approved: "Approved",
-      returned: "Returned",
-      rejected: "Rejected",
-      released: "Released"
-    };
-    return statusLabels[status] || status;
-  };
-
-  const formatDate = (timestamp) => {
-    if (!timestamp) return "N/A";
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric"
-      });
-    }
-    return "N/A";
-  };
-
-  const formatDateTime = (timestamp) => {
-    if (!timestamp) return "N/A";
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    }
-    return "N/A";
   };
 
   // Filter documents by active tab
@@ -383,6 +336,7 @@ const AdminOutgoingDocuments = () => {
                   <th>Reference Number</th>
                   <th>Document Type</th>
                   <th>Title</th>
+                  <th>In Response To</th>
                   <th>Released To</th>
                   <th>Date Released</th>
                   <th>Released By</th>
@@ -396,6 +350,15 @@ const AdminOutgoingDocuments = () => {
                     <td>{doc.documentNumber || doc.referenceNumber || "—"}</td>
                     <td>{doc.documentType}</td>
                     <td className="table-title">{doc.title}</td>
+                    <td>
+                      {doc.responseTo ? (
+                        <span className="response-link" title={`Response to document: ${doc.responseTo}`}>
+                          📝 Response
+                        </span>
+                      ) : (
+                        <span className="no-response">—</span>
+                      )}
+                    </td>
                     <td>{doc.releasedToName || doc.releasedTo || "—"}</td>
                     <td>{doc.dateReleased ? formatDate(doc.dateReleased) : "—"}</td>
                     <td>{doc.releasedByName || "Unknown"}</td>
@@ -512,6 +475,24 @@ const AdminOutgoingDocuments = () => {
                     </div>
                   )}
                 </div>
+
+                {/* Linked Incoming Document Section */}
+                {selectedDocument.responseTo && (
+                  <div className="linked-incoming-section">
+                    <h4 className="linked-incoming-title">In Response To</h4>
+                    <div className="linked-incoming-card">
+                      <div className="linked-incoming-header">
+                        <span className="linked-incoming-type">Incoming Document</span>
+                      </div>
+                      <div className="linked-incoming-id">
+                        <strong>Document ID:</strong> {selectedDocument.responseTo}
+                      </div>
+                      <p className="linked-incoming-hint">
+                        This outgoing document was generated as a response to the incoming document referenced above.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Status History */}
                 <div className="detail-history-section">

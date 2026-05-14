@@ -29,3 +29,40 @@
   --info: #17a2b8;
 }
 
+/* Shared: pipeline-gate banner shown when unresolved reviewer comments block stage advance */
+.comment-gate-banner {
+  background: #fff8e1;
+  border: 1px solid #ffd54f;
+  color: #8a5a00;
+  padding: 0.6rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+/* Shared: per-file comment indicator under each preview button */
+.file-comment-counts {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  margin: 0.25rem 0 0.5rem 0.25rem;
+}
+
+.file-comment-pending {
+  background: #fff3cd;
+  border: 1px solid #ffd54f;
+  color: #8a5a00;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.file-comment-resolved {
+  background: #e8f5e9;
+  border: 1px solid #a5d6a7;
+  color: #1b5e20;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+}
+

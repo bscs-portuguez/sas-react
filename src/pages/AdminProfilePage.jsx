@@ -5,6 +5,7 @@ import { getUserById, updateUserPassword, updateUserEmail, deleteUserAccount } f
 import { getOrganizationById } from "../services/organizationService";
 import AdminLayout from "../components/admin/AdminLayout";
 import LoadingScreen from "../components/LoadingScreen";
+import { formatDateTime } from "../utils/formatters";
 import "../styles/colors.css";
 import "./ProfilePage.css";
 
@@ -154,20 +155,6 @@ const AdminProfilePage = () => {
       setDeleteError(error.message || "Failed to delete account. Please try again.");
       setDeletingAccount(false);
     }
-  };
-
-  const formatDate = (timestamp) => {
-    if (!timestamp) return "N/A";
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    }
-    return "N/A";
   };
 
   if (loading) {
@@ -400,15 +387,15 @@ const AdminProfilePage = () => {
             <div className="profile-info-grid">
               <div className="info-item">
                 <label className="info-label">Date Created</label>
-                <div className="info-value">{formatDate(userData?.dateCreated)}</div>
+                <div className="info-value">{formatDateTime(userData?.dateCreated)}</div>
               </div>
               <div className="info-item">
                 <label className="info-label">Last Updated</label>
-                <div className="info-value">{formatDate(userData?.lastUpdated)}</div>
+                <div className="info-value">{formatDateTime(userData?.lastUpdated)}</div>
               </div>
               <div className="info-item">
                 <label className="info-label">Last Login</label>
-                <div className="info-value">{formatDate(userData?.lastLogin)}</div>
+                <div className="info-value">{formatDateTime(userData?.lastLogin)}</div>
               </div>
             </div>
           </div>

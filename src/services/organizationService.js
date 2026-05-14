@@ -1,13 +1,12 @@
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
+import {
+  collection,
+  query,
+  where,
+  getDocs,
   doc,
   getDoc,
   updateDoc,
-  serverTimestamp,
-  orderBy
+  serverTimestamp
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 

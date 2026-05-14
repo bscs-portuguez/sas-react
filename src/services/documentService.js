@@ -1,21 +1,21 @@
-import { 
-  collection, 
-  doc, 
-  addDoc,
-  getDoc, 
-  getDocs, 
-  updateDoc,
-  query, 
-  where, 
-  orderBy, 
-  serverTimestamp, 
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  serverTimestamp,
   Timestamp,
   writeBatch,
+  runTransaction,
   limit as queryLimit
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../config/firebase";
 import { getUserById } from "./userService";
+import { getRequiredKeys, REQUIREMENT_LABELS } from "../utils/proposalConstants";
 
 /**
  * Document Service
@@ -27,6 +27,128 @@ import { getUserById } from "./userService";
  * - Status history tracking
  * - File uploads to Firebase Storage
  */
+
+/**
+ * Submit an activity proposal with multiple required files.
+ * Creates document with `files` array schema and initializes the pipeline.
+ */
+export const submitActivityProposal = async (
+  { title, description, proposalFlags, submitterRole },
+  uploadedFiles,
+  userId,
+  organizationId
+) => {
+  if (!title?.trim()) throw new Error("Proposal title is required");
+  if (title.length > 200) throw new Error("Title must be 200 characters or less");
+  if (!organizationId) throw new Error("Organization not found");
+
+  const isISGSubmission = submitterRole === "ISG";
+  const requiredKeys = getRequiredKeys(proposalFlags, { isISG: isISGSubmission });
+  for (const key of requiredKeys) {
+    if (!uploadedFiles[key]) {
+      throw new Error(`Missing required document: ${REQUIREMENT_LABELS[key]}`);
+    }
+  }
+
+  const allowedTypes = [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ];
+  for (const [key, file] of Object.entries(uploadedFiles)) {
+    if (!file) continue;
+    if (!allowedTypes.includes(file.type)) {
+      throw new Error(
+        `Invalid file type for "${REQUIREMENT_LABELS[key]}". PDF or Word (.pdf, .doc, .docx) only.`
+      );
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      throw new Error(
+        `File too large: "${REQUIREMENT_LABELS[key]}". Maximum 50 MB.`
+      );
+    }
+  }
+
+  const documentRef = doc(collection(db, "documents"));
+  const documentId = documentRef.id;
+  const uploadedAt = Timestamp.fromDate(new Date());
+
+  const filesArray = [];
+  for (const [requirementKey, file] of Object.entries(uploadedFiles)) {
+    if (!file) continue;
+    const storageRef = ref(
+      storage,
+      `documents/${documentId}/${requirementKey}/${file.name}`
+    );
+    const snapshot = await uploadBytes(storageRef, file, {
+      contentType: file.type,
+      customMetadata: {
+        uploadedBy: userId,
+        originalFileName: file.name,
+        documentId,
+      },
+    });
+    const fileUrl = await getDownloadURL(snapshot.ref);
+    filesArray.push({
+      fileUrl,
+      fileName: file.name,
+      fileSize: file.size,
+      requirementKey,
+      uploadedAt,
+      uploadedBy: userId,
+    });
+  }
+
+  const batch = writeBatch(db);
+
+  const initialStage = isISGSubmission ? "sas_review" : "isg_endorsement";
+
+  batch.set(documentRef, {
+    documentId,
+    documentNumber: null,
+    organizationId,
+    submittedBy: userId,
+    submitterRole: submitterRole || null,
+    documentType: "activity_proposal",
+    direction: "incoming",
+    title: title.trim(),
+    description: description?.trim() || "",
+    files: filesArray,
+    proposalFlags,
+    revisionCount: 0,
+    dateLastRevised: null,
+    status: "pending",
+    remarks: "",
+    assignedTo: null,
+    createdBy: userId,
+    updatedBy: userId,
+    dateSubmitted: serverTimestamp(),
+    dateAssigned: null,
+    dateReviewed: null,
+    dateReleased: null,
+    lastUpdated: serverTimestamp(),
+    pipeline: {
+      currentStage: initialStage,
+      stages: [],
+    },
+  });
+
+  const historyRef = doc(collection(db, "documentStatusHistory"));
+  batch.set(historyRef, {
+    documentId,
+    status: "pending",
+    previousStatus: null,
+    changedBy: userId,
+    remarks: isISGSubmission
+      ? "Activity proposal submitted by ISG — forwarded directly to SAS"
+      : "Activity proposal submitted",
+    timestamp: serverTimestamp(),
+  });
+
+  await batch.commit();
+
+  return { documentId, status: "pending" };
+};
 
 /**
  * Submit a new document (Organization Officer)
@@ -252,6 +374,106 @@ export const getDocumentById = async (documentId) => {
 };
 
 /**
+ * Get the appropriate response type for an incoming document type
+ * @param {string} incomingType - The incoming document type code
+ * @returns {Object} Response type info with type code and display label
+ */
+export const getResponseTypeForIncoming = (incomingType) => {
+  const mapping = {
+    activity_proposal: { type: "approval_memorandum", label: "Approval Memorandum" },
+    financial_report: { type: "endorsement_letter", label: "Endorsement Letter" },
+    financial_statement: { type: "endorsement_letter", label: "Endorsement Letter" },
+    compliance_document: { type: "feedback_memo", label: "Feedback Memo" },
+    other: { type: "generic_response", label: "Generic Response" },
+    accomplishment_report: { type: "acknowledgment_letter", label: "Acknowledgment Letter" }
+  };
+  return mapping[incomingType] || { type: "generic_response", label: "Generic Response" };
+};
+
+/**
+ * Format date for templates
+ * @param {Timestamp|Date} timestamp - Date to format
+ * @returns {string} Formatted date string
+ */
+const formatDateForTemplate = (timestamp) => {
+  if (!timestamp) return "N/A";
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  });
+};
+
+/**
+ * Get pre-filled template for response document
+ * @param {Object} incomingDoc - The incoming document data
+ * @param {string} responseType - The response type code
+ * @returns {Object} Template with subject and description
+ */
+export const getResponseTemplate = (incomingDoc, responseType) => {
+  const docTypeDisplay = incomingDoc.documentType?.replace(/_/g, " ") || "document";
+  const formattedDate = formatDateForTemplate(incomingDoc.dateSubmitted);
+  
+  const templates = {
+    approval_memorandum: {
+      subject: `Approval: ${incomingDoc.title}`,
+      description: `This is to formally approve your Activity Proposal titled "${incomingDoc.title}" submitted on ${formattedDate}.\n\nYour proposal has been reviewed and meets all necessary requirements. You may proceed with the planned activities as outlined in your submission.`
+    },
+    endorsement_letter: {
+      subject: `Endorsement: ${incomingDoc.title}`,
+      description: `We hereby endorse the ${docTypeDisplay} titled "${incomingDoc.title}" submitted by your organization on ${formattedDate}.\n\nThis endorsement confirms the accuracy and validity of the reported information.`
+    },
+    feedback_memo: {
+      subject: `Feedback: ${incomingDoc.title}`,
+      description: `Please find below our feedback regarding your ${docTypeDisplay} submission dated ${formattedDate}:\n\n[Add specific feedback here]`
+    },
+    acknowledgment_letter: {
+      subject: `Acknowledgment: ${incomingDoc.title}`,
+      description: `We acknowledge receipt and successful review of your ${docTypeDisplay} titled "${incomingDoc.title}" submitted on ${formattedDate}.\n\nYour organization's efforts are duly noted and appreciated.`
+    },
+    generic_response: {
+      subject: `Response: ${incomingDoc.title}`,
+      description: `This is in response to your submission titled "${incomingDoc.title}" dated ${formattedDate}.\n\n[Add response details here]`
+    }
+  };
+  
+  return templates[responseType] || templates.generic_response;
+};
+
+/**
+ * Get outgoing documents linked to an incoming document
+ * @param {string} incomingDocumentId - The incoming document ID
+ * @returns {Promise<Array>} Array of linked outgoing documents
+ */
+export const getOutgoingDocumentsForIncoming = async (incomingDocumentId) => {
+  try {
+    const documentsRef = collection(db, "documents");
+    const q = query(
+      documentsRef,
+      where("responseTo", "==", incomingDocumentId),
+      where("direction", "==", "outgoing"),
+      orderBy("dateSubmitted", "desc")
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const documents = [];
+    
+    querySnapshot.forEach((docSnapshot) => {
+      documents.push({
+        documentId: docSnapshot.id,
+        ...docSnapshot.data()
+      });
+    });
+    
+    return documents;
+  } catch (error) {
+    console.error("Error fetching outgoing documents for incoming:", error);
+    return [];
+  }
+};
+
+/**
  * Assign document number (Admin only)
  * @param {string} documentId - Document ID
  * @param {string} documentNumber - Document number to assign (e.g., "DOC-2024-001")
@@ -331,9 +553,24 @@ export const assignDocumentNumber = async (documentId, documentNumber, adminId) 
  * @param {string} newStatus - New status
  * @param {string} remarks - Optional remarks
  * @param {string} adminId - Admin user ID
- * @returns {Promise<void>}
+ * @param {boolean} generateResponse - Whether to generate a response document (for incoming approvals)
+ * @param {Object} responseData - Response document data (if generateResponse is true)
+ * @param {string} responseData.subject - Response document subject
+ * @param {string} responseData.description - Response document description
+ * @param {string} responseData.orderNumber - Optional order number for memorandums
+ * @param {string} responseData.fileUrl - Optional file URL
+ * @param {string} responseData.fileName - Optional file name
+ * @param {number} responseData.fileSize - Optional file size
+ * @returns {Promise<Object>} Updated document info, includes outgoingDocumentId if response was generated
  */
-export const updateDocumentStatus = async (documentId, newStatus, remarks, adminId) => {
+export const updateDocumentStatus = async (
+  documentId, 
+  newStatus, 
+  remarks, 
+  adminId, 
+  generateResponse = false,
+  responseData = null
+) => {
   try {
     // Validate status
     const validStatuses = ["pending", "under_review", "approved", "returned", "rejected", "released"];
@@ -359,6 +596,20 @@ export const updateDocumentStatus = async (documentId, newStatus, remarks, admin
     // Cannot change status if document is released
     if (documentData.status === "released") {
       throw new Error("Cannot change status of a released document");
+    }
+
+    // Validate response generation only for approved status on incoming documents
+    let outgoingDocumentId = null;
+    if (generateResponse) {
+      if (newStatus !== "approved") {
+        throw new Error("Response documents can only be generated when approving a document");
+      }
+      if (documentData.direction !== "incoming") {
+        throw new Error("Response documents can only be generated for incoming documents");
+      }
+      if (!responseData || !responseData.subject || !responseData.description) {
+        throw new Error("Response data with subject and description is required");
+      }
     }
 
     // Use batch to update document and create history
@@ -391,9 +642,57 @@ export const updateDocumentStatus = async (documentId, newStatus, remarks, admin
       timestamp: serverTimestamp()
     });
 
+    // Generate response document if requested
+    if (generateResponse && responseData) {
+      const outgoingRef = doc(collection(db, "documents"));
+      outgoingDocumentId = outgoingRef.id;
+
+      batch.set(outgoingRef, {
+        documentId: outgoingDocumentId,
+        documentNumber: responseData.orderNumber || null,
+        organizationId: documentData.organizationId,
+        submittedBy: adminId,
+        documentType: responseData.responseType || "generic_response",
+        direction: "outgoing",
+        responseTo: documentId,
+        title: responseData.subject,
+        description: responseData.description,
+        status: "released",
+        remarks: responseData.remarks || "",
+        assignedTo: adminId,
+        dateSubmitted: serverTimestamp(),
+        dateAssigned: serverTimestamp(),
+        dateReviewed: serverTimestamp(),
+        dateReleased: serverTimestamp(),
+        lastUpdated: serverTimestamp(),
+        createdBy: adminId,
+        updatedBy: adminId,
+        fileUrl: responseData.fileUrl || null,
+        fileName: responseData.fileName || null,
+        fileSize: responseData.fileSize || null
+      });
+
+      // Create status history entry for outgoing document
+      const outgoingHistoryRef = doc(collection(db, "documentStatusHistory"));
+      batch.set(outgoingHistoryRef, {
+        documentId: outgoingDocumentId,
+        status: "released",
+        previousStatus: null,
+        changedBy: adminId,
+        remarks: `Generated in response to ${documentData.documentNumber || documentId}`,
+        timestamp: serverTimestamp()
+      });
+    }
+
     await batch.commit();
     
     console.log(`Document ${documentId} status updated from ${previousStatus} to ${newStatus}`);
+    
+    return {
+      documentId,
+      status: newStatus,
+      outgoingDocumentId
+    };
   } catch (error) {
     console.error("Error updating document status:", error);
     throw error;
@@ -673,6 +972,371 @@ export const getReleasedOutgoingDocuments = async (limit = null) => {
 };
 
 /**
+ * Get all activity proposals currently at a given pipeline stage.
+ * ISG users have Firestore read permission across all orgs for activity_proposal docs.
+ */
+export const getProposalsAtStage = async (stage) => {
+  // Equality-only where clauses avoid the composite index requirement.
+  // We sort by dateSubmitted client-side (oldest first = FIFO queue).
+  const q = query(
+    collection(db, "documents"),
+    where("documentType", "==", "activity_proposal"),
+    where("pipeline.currentStage", "==", stage)
+  );
+  const snap = await getDocs(q);
+  const docs = snap.docs.map((d) => ({ documentId: d.id, ...d.data() }));
+  docs.sort((a, b) => {
+    const aTime = a.dateSubmitted?.toDate?.()?.getTime() ?? 0;
+    const bTime = b.dateSubmitted?.toDate?.()?.getTime() ?? 0;
+    return aTime - bTime;
+  });
+  return docs;
+};
+
+/**
+ * ISG forwards an activity proposal to SAS after assessment.
+ * ISG does not generate documents — the endorsement letter is SAS's responsibility.
+ */
+export const endorseProposal = async (documentId, userId, remarks = "") => {
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Proposal not found");
+  const data = docSnap.data();
+  if (data.pipeline?.currentStage !== "isg_endorsement") {
+    throw new Error("Proposal is not at the ISG endorsement stage");
+  }
+
+  const completedAt = Timestamp.fromDate(new Date());
+  const newStage = {
+    stage: "isg_endorsement",
+    action: "forwarded",
+    completedAt,
+    completedBy: userId,
+    remarks: remarks || "",
+  };
+
+  const batch = writeBatch(db);
+  batch.update(docRef, {
+    "pipeline.currentStage": "sas_review",
+    "pipeline.stages": [...(data.pipeline?.stages || []), newStage],
+    lastUpdated: serverTimestamp(),
+    updatedBy: userId,
+  });
+
+  const histRef = doc(collection(db, "documentStatusHistory"));
+  batch.set(histRef, {
+    documentId,
+    status: "pending",
+    previousStatus: data.status,
+    changedBy: userId,
+    remarks: remarks
+      ? `Assessed and forwarded to SAS by ISG — ${remarks}`
+      : "Assessed and forwarded to SAS by ISG",
+    timestamp: serverTimestamp(),
+  });
+
+  await batch.commit();
+};
+
+/**
+ * ISG returns a proposal to the submitting org for revision.
+ */
+export const returnProposalFromISG = async (documentId, userId, remarks) => {
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Proposal not found");
+  const data = docSnap.data();
+
+  const completedAt = Timestamp.fromDate(new Date());
+  const newStage = {
+    stage: "isg_endorsement",
+    action: "returned",
+    completedAt,
+    completedBy: userId,
+    remarks: remarks || "",
+  };
+
+  const batch = writeBatch(db);
+  batch.update(docRef, {
+    status: "returned",
+    remarks: remarks || "",
+    "pipeline.currentStage": null,
+    "pipeline.stages": [...(data.pipeline?.stages || []), newStage],
+    lastUpdated: serverTimestamp(),
+    updatedBy: userId,
+  });
+
+  const histRef = doc(collection(db, "documentStatusHistory"));
+  batch.set(histRef, {
+    documentId,
+    status: "returned",
+    previousStatus: data.status,
+    changedBy: userId,
+    remarks: remarks || "Returned by ISG for revision",
+    timestamp: serverTimestamp(),
+  });
+
+  await batch.commit();
+};
+
+/**
+ * ISG marks a proposal as distributed to the requesting organization.
+ * This is the final pipeline stage — the document is marked approved and the pipeline closes.
+ */
+export const markAsDistributed = async (documentId, userId) => {
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Proposal not found");
+  const data = docSnap.data();
+  if (data.pipeline?.currentStage !== "isg_distribution") {
+    throw new Error("Proposal is not at the ISG distribution stage");
+  }
+
+  const completedAt = Timestamp.fromDate(new Date());
+  const newStage = {
+    stage: "isg_distribution",
+    action: "distributed",
+    completedAt,
+    completedBy: userId,
+  };
+
+  const batch = writeBatch(db);
+  batch.update(docRef, {
+    status: "approved",
+    "pipeline.currentStage": null,
+    "pipeline.stages": [...(data.pipeline?.stages || []), newStage],
+    lastUpdated: serverTimestamp(),
+    updatedBy: userId,
+  });
+
+  const histRef = doc(collection(db, "documentStatusHistory"));
+  batch.set(histRef, {
+    documentId,
+    status: "approved",
+    previousStatus: data.status,
+    changedBy: userId,
+    remarks: "Distributed to student organization by ISG — activity proposal complete",
+    timestamp: serverTimestamp(),
+  });
+
+  await batch.commit();
+};
+
+/**
+ * SAS completes review: uploads endorsement letter, advances pipeline to vpaa_review,
+ * creates a single-use review token for VPAA.
+ * Returns { tokenId, fileUrl } for the caller to send the review-link email.
+ */
+export const completeSASReview = async (documentId, adminId, endorsementFile) => {
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Proposal not found");
+  const data = docSnap.data();
+  if (data.pipeline?.currentStage !== "sas_review") {
+    throw new Error("Proposal is not at the SAS review stage");
+  }
+
+  // Upload endorsement letter to Storage
+  const storageRef = ref(
+    storage,
+    `documents/${documentId}/sas_endorsement_letter/${endorsementFile.name}`
+  );
+  const snapshot = await uploadBytes(storageRef, endorsementFile, {
+    contentType: endorsementFile.type,
+    customMetadata: { uploadedBy: adminId, documentId },
+  });
+  const fileUrl = await getDownloadURL(snapshot.ref);
+
+  const now = Timestamp.fromDate(new Date());
+  const expiresAt = Timestamp.fromDate(
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  );
+
+  const tokenRef = doc(collection(db, "reviewTokens"));
+  const tokenId = tokenRef.id;
+
+  const sasStageEntry = {
+    stage: "sas_review",
+    action: "forwarded",
+    completedAt: now,
+    completedBy: adminId,
+    generatedFileUrl: fileUrl,
+    generatedFileName: endorsementFile.name,
+  };
+
+  const vpaaStageEntry = {
+    stage: "vpaa_review",
+    token: tokenId,
+    tokenSentAt: now,
+    tokenExpiresAt: expiresAt,
+    completedAt: null,
+    completedBy: null,
+    action: null,
+    remarks: null,
+  };
+
+  const updatedFiles = [
+    ...(data.files || []),
+    {
+      fileUrl,
+      fileName: endorsementFile.name,
+      fileSize: endorsementFile.size,
+      requirementKey: "sas_endorsement_letter",
+      uploadedAt: now,
+      uploadedBy: adminId,
+    },
+  ];
+
+  const batch = writeBatch(db);
+
+  batch.update(docRef, {
+    "pipeline.currentStage": "vpaa_review",
+    "pipeline.stages": [
+      ...(data.pipeline?.stages || []),
+      sasStageEntry,
+      vpaaStageEntry,
+    ],
+    files: updatedFiles,
+    lastUpdated: serverTimestamp(),
+    updatedBy: adminId,
+  });
+
+  batch.set(tokenRef, {
+    tokenId,
+    documentId,
+    stage: "vpaa_review",
+    createdAt: serverTimestamp(),
+    createdBy: adminId,
+    expiresAt,
+    consumed: false,
+    consumedAt: null,
+    action: null,
+    remarks: null,
+  });
+
+  const histRef = doc(collection(db, "documentStatusHistory"));
+  batch.set(histRef, {
+    documentId,
+    status: "pending",
+    previousStatus: data.status,
+    changedBy: adminId,
+    remarks:
+      "SAS review complete — endorsement letter generated — forwarded to VPAA for review",
+    timestamp: serverTimestamp(),
+  });
+
+  await batch.commit();
+
+  return { tokenId, fileUrl };
+};
+
+/**
+ * SAS performs the final release after the last reviewing office approves.
+ * - Org-submitted proposals advance from `sas_release` to `isg_distribution`
+ *   so ISG can hand the approved proposal back to the requesting organization.
+ * - ISG-submitted proposals are marked approved directly (no separate
+ *   distribution stage — ISG is the requester).
+ */
+export const releaseFromSASToISG = async (documentId, adminId) => {
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Proposal not found");
+  const data = docSnap.data();
+  if (data.pipeline?.currentStage !== "sas_release") {
+    throw new Error("Proposal is not at the SAS release stage");
+  }
+
+  const isISGSubmission = data.submitterRole === "ISG";
+  const now = Timestamp.fromDate(new Date());
+  const stages = Array.isArray(data.pipeline?.stages)
+    ? [...data.pipeline.stages]
+    : [];
+
+  let activeIdx = -1;
+  for (let i = stages.length - 1; i >= 0; i--) {
+    if (stages[i]?.stage === "sas_release" && stages[i]?.completedAt == null) {
+      activeIdx = i;
+      break;
+    }
+  }
+  const stageEntry = {
+    stage: "sas_release",
+    action: "released",
+    completedAt: now,
+    completedBy: adminId,
+  };
+  if (activeIdx !== -1) {
+    stages[activeIdx] = { ...stages[activeIdx], ...stageEntry };
+  } else {
+    stages.push(stageEntry);
+  }
+
+  const batch = writeBatch(db);
+  batch.update(docRef, {
+    status: isISGSubmission ? "approved" : data.status,
+    "pipeline.currentStage": isISGSubmission ? null : "isg_distribution",
+    "pipeline.stages": stages,
+    lastUpdated: serverTimestamp(),
+    updatedBy: adminId,
+  });
+
+  const histRef = doc(collection(db, "documentStatusHistory"));
+  batch.set(histRef, {
+    documentId,
+    status: isISGSubmission ? "approved" : "pending",
+    previousStatus: data.status,
+    changedBy: adminId,
+    remarks: isISGSubmission
+      ? "Released by SAS — ISG-submitted proposal approved"
+      : "Released by SAS — forwarded to ISG for distribution",
+    timestamp: serverTimestamp(),
+  });
+
+  await batch.commit();
+};
+
+/**
+ * SAS returns a proposal to the submitting organization for revision.
+ */
+export const returnFromSAS = async (documentId, adminId, remarks) => {
+  const docRef = doc(db, "documents", documentId);
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) throw new Error("Proposal not found");
+  const data = docSnap.data();
+
+  const now = Timestamp.fromDate(new Date());
+  const stageEntry = {
+    stage: "sas_review",
+    action: "returned",
+    completedAt: now,
+    completedBy: adminId,
+    remarks: remarks || "",
+  };
+
+  const batch = writeBatch(db);
+  batch.update(docRef, {
+    status: "returned",
+    remarks: remarks || "",
+    "pipeline.currentStage": null,
+    "pipeline.stages": [...(data.pipeline?.stages || []), stageEntry],
+    lastUpdated: serverTimestamp(),
+    updatedBy: adminId,
+  });
+
+  const histRef = doc(collection(db, "documentStatusHistory"));
+  batch.set(histRef, {
+    documentId,
+    status: "returned",
+    previousStatus: data.status,
+    changedBy: adminId,
+    remarks: remarks || "Returned by SAS for revision",
+    timestamp: serverTimestamp(),
+  });
+
+  await batch.commit();
+};
+
+/**
  * Create outgoing document (Admin only)
  * @param {Object} documentData - Document data
  * @param {string} documentData.documentType - Document type ("Memorandum", "Announcement", "Other")
@@ -815,7 +1479,7 @@ export const createOutgoingDocument = async (documentData, file, adminId) => {
     await batch.commit();
 
     console.log(`Outgoing document ${documentId} created successfully`);
-    
+
     return {
       documentId: documentId,
       documentNumber: documentData.orderNumber || null,
@@ -825,5 +1489,230 @@ export const createOutgoingDocument = async (documentData, file, adminId) => {
     console.error("Error creating outgoing document:", error);
     throw error;
   }
+};
+
+const STAGE_OFFICE_LABEL = {
+  isg_endorsement: "ISG",
+  sas_review: "SAS",
+  sas_release: "SAS",
+  isg_distribution: "ISG",
+};
+
+/**
+ * Records that the active reviewing office has opened a proposal document.
+ * - Only acts when `pipeline.currentStage === expectedStage` (so monitoring views from
+ *   non-active offices don't flip the badge).
+ * - Increments `viewCount` on every call; stamps `firstViewedAt`/`firstViewedBy` only on first view.
+ * - Appends a `documentStatusHistory` entry on first view ("Viewed by ISG"/"Viewed by SAS").
+ * Fire-and-forget from callers — failures are logged, not thrown.
+ */
+export const markProposalFileViewed = async (documentId, userId, expectedStage) => {
+  if (!documentId || !userId || !expectedStage) return;
+  const docRef = doc(db, "documents", documentId);
+  const historyRef = doc(collection(db, "documentStatusHistory"));
+  const officeLabel = STAGE_OFFICE_LABEL[expectedStage] || expectedStage;
+
+  try {
+    const result = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      if (!snap.exists()) return { skipped: "doc-missing" };
+      const data = snap.data();
+      if (data.pipeline?.currentStage !== expectedStage) {
+        return { skipped: "stage-mismatch" };
+      }
+      const stages = Array.isArray(data.pipeline?.stages) ? [...data.pipeline.stages] : [];
+      let activeIdx = -1;
+      for (let i = stages.length - 1; i >= 0; i--) {
+        if (stages[i]?.stage === expectedStage) { activeIdx = i; break; }
+      }
+
+      if (activeIdx === -1) {
+        // No stage entry yet (e.g., isg_endorsement on a freshly submitted proposal that
+        // doesn't pre-seed an entry). Create one so view tracking has a place to live.
+        const isFirstView = true;
+        const now = Timestamp.fromDate(new Date());
+        stages.push({
+          stage: expectedStage,
+          action: null,
+          completedAt: null,
+          completedBy: null,
+          firstViewedAt: now,
+          firstViewedBy: userId,
+          viewCount: 1,
+        });
+        tx.update(docRef, {
+          "pipeline.stages": stages,
+          lastUpdated: serverTimestamp(),
+        });
+        tx.set(historyRef, {
+          documentId,
+          status: data.status || "pending",
+          previousStatus: data.status || "pending",
+          changedBy: userId,
+          remarks: `Viewed by ${officeLabel}`,
+          timestamp: serverTimestamp(),
+        });
+        return { isFirstView };
+      }
+
+      const isFirstView = !stages[activeIdx].firstViewedAt;
+      const now = Timestamp.fromDate(new Date());
+      stages[activeIdx] = {
+        ...stages[activeIdx],
+        viewCount: (stages[activeIdx].viewCount || 0) + 1,
+        ...(isFirstView ? { firstViewedAt: now, firstViewedBy: userId } : {}),
+      };
+      tx.update(docRef, {
+        "pipeline.stages": stages,
+        lastUpdated: serverTimestamp(),
+      });
+      if (isFirstView) {
+        tx.set(historyRef, {
+          documentId,
+          status: data.status || "pending",
+          previousStatus: data.status || "pending",
+          changedBy: userId,
+          remarks: `Viewed by ${officeLabel}`,
+          timestamp: serverTimestamp(),
+        });
+      }
+      return { isFirstView };
+    });
+    return result;
+  } catch (error) {
+    console.error("Error recording proposal view:", error);
+    return { error: error.message };
+  }
+};
+
+/**
+ * Upload a revised version of a file on a proposal.
+ * - Archives the current entry into `previousVersion` (cap at 1 prior version).
+ * - Increments the entry's `version` (default 1 → 2 → 3, with `previousVersion` always
+ *   holding only the most-recent prior).
+ * - Resolves the listed comments with revision metadata.
+ * - Bumps `revisionCount` and `dateLastRevised` on the parent doc.
+ * - Appends a status-history entry describing the revision.
+ *
+ * @param {Object} args
+ * @param {string} args.documentId
+ * @param {string} args.requirementKey   - which file in `files[]` to revise
+ * @param {File}   args.file             - the new file
+ * @param {string} args.reason           - revision reason (free text)
+ * @param {string[]} args.commentIds     - comment IDs being resolved by this revision
+ * @param {string} args.userId           - uid of the org member uploading
+ */
+export const uploadRevision = async ({
+  documentId,
+  requirementKey,
+  file,
+  reason,
+  commentIds,
+  userId,
+}) => {
+  if (!documentId || !requirementKey || !file || !userId) {
+    throw new Error("documentId, requirementKey, file, and userId are required");
+  }
+
+  const docRef = doc(db, "documents", documentId);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) throw new Error("Document not found");
+  const data = snap.data();
+
+  if (data.organizationId) {
+    const user = await getUserById(userId);
+    if (!user || user.organizationId !== data.organizationId) {
+      throw new Error("Only members of the requesting organization may upload a revision");
+    }
+  }
+
+  const files = Array.isArray(data.files) ? [...data.files] : [];
+  const idx = files.findIndex((f) => f.requirementKey === requirementKey);
+  if (idx === -1) throw new Error("File entry not found for this requirementKey");
+
+  const current = files[idx];
+  const currentVersion = current.version || 1;
+  const newVersion = currentVersion + 1;
+
+  const storageRef = ref(
+    storage,
+    `documents/${documentId}/${requirementKey}/v${newVersion}_${file.name}`
+  );
+  const snapshot = await uploadBytes(storageRef, file, {
+    contentType: file.type,
+    customMetadata: {
+      uploadedBy: userId,
+      originalFileName: file.name,
+      documentId,
+      revisionVersion: String(newVersion),
+    },
+  });
+  const fileUrl = await getDownloadURL(snapshot.ref);
+  const uploadedAt = Timestamp.fromDate(new Date());
+
+  // Cap at 1 prior version: previousVersion always holds the version we're about to replace.
+  const previousVersion = {
+    fileUrl: current.fileUrl,
+    fileName: current.fileName,
+    fileSize: current.fileSize || null,
+    uploadedAt: current.uploadedAt || null,
+    uploadedBy: current.uploadedBy || null,
+    version: currentVersion,
+  };
+
+  files[idx] = {
+    ...current,
+    fileUrl,
+    fileName: file.name,
+    fileSize: file.size,
+    uploadedAt,
+    uploadedBy: userId,
+    version: newVersion,
+    revisionReason: reason?.trim() || "",
+    resolvedCommentIds: Array.isArray(commentIds) ? [...commentIds] : [],
+    previousVersion,
+  };
+
+  const batch = writeBatch(db);
+
+  batch.update(docRef, {
+    files,
+    revisionCount: (data.revisionCount || 0) + 1,
+    dateLastRevised: serverTimestamp(),
+    lastUpdated: serverTimestamp(),
+  });
+
+  if (Array.isArray(commentIds)) {
+    for (const commentId of commentIds) {
+      const cRef = doc(db, "documents", documentId, "comments", commentId);
+      batch.update(cRef, {
+        resolved: true,
+        resolvedByRevision: {
+          version: newVersion,
+          fileName: file.name,
+          fileUrl,
+          reason: reason?.trim() || "",
+          resolvedAt: Timestamp.now(),
+          resolvedBy: userId,
+        },
+      });
+    }
+  }
+
+  const historyRef = doc(collection(db, "documentStatusHistory"));
+  batch.set(historyRef, {
+    documentId,
+    status: data.status || "pending",
+    previousStatus: data.status || "pending",
+    changedBy: userId,
+    remarks: `${REQUIREMENT_LABELS[requirementKey] || requirementKey} revised to v${newVersion}${
+      reason ? `: ${reason.trim()}` : ""
+    }`,
+    timestamp: serverTimestamp(),
+  });
+
+  await batch.commit();
+
+  return { fileUrl, version: newVersion };
 };
 

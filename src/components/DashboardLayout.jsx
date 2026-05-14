@@ -3,34 +3,34 @@ import Icon from "./Icon";
 import "../styles/colors.css";
 import "./DashboardLayout.css";
 
-const DashboardLayout = ({ children, currentPage = "dashboard" }) => {
+const DashboardLayout = ({ children, currentPage = "dashboard", orgType = null }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: "dashboard", path: "/dashboard" },
-    { id: "activity-proposals", label: "Activity Proposals", icon: "activity-proposals", path: "/activity-proposals" },
-    { id: "reports", label: "Reports & Compliance", icon: "reports", path: "/reports" },
-    { id: "documents", label: "Document Submissions", icon: "documents", path: "/documents" },
-    { id: "equipment", label: "Equipment Borrowing", icon: "equipment", path: "/equipment" },
-    { id: "references", label: "References & Downloads", icon: "references", path: "/references" },
-    { id: "profile", label: "Profile", icon: "profile", path: "/profile" },
-  ];
+  const menuItems = orgType === "ISG"
+    ? [
+        { id: "isg-endorsement", label: "Endorsement Queue", icon: "activity-proposals" },
+        { id: "isg-distribution", label: "Distribution", icon: "dashboard" },
+        { id: "activity-proposals", label: "Our Proposals", icon: "activity-proposals" },
+        { id: "profile", label: "Profile", icon: "profile" },
+      ]
+    : [
+        { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+        { id: "activity-proposals", label: "Activity Proposals", icon: "activity-proposals" },
+        { id: "equipment-borrowing", label: "Equipment Borrowing", icon: "equipment" },
+        { id: "profile", label: "Profile", icon: "profile" },
+      ];
+
+  const pageMap = {
+    dashboard: "home",
+    "activity-proposals": "activity-proposals",
+    "equipment-borrowing": "equipment-borrowing",
+    "isg-endorsement": "isg-endorsement",
+    "isg-distribution": "isg-distribution",
+    profile: "profile",
+  };
 
   const handleMenuClick = (item) => {
-    // Map menu item IDs to page identifiers
-    const pageMap = {
-      dashboard: "home",  // Dashboard maps to home page
-      "activity-proposals": "activity-proposals",
-      reports: "reports",
-      documents: "documents",
-      equipment: "equipment",
-      references: "references",
-      profile: "profile"
-    };
-    
     const pageId = pageMap[item.id] || item.id;
-    
-    // Dispatch navigation event that App.jsx listens to
     window.dispatchEvent(new CustomEvent("pageNavigate", { detail: pageId }));
   };
 

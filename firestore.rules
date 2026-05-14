@@ -1,0 +1,270 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function currentUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && currentUserDoc().role == 'Admin';
+    }
+
+    function isOrganizationUser() {
+      // An "organization user" is any authenticated user that belongs to an
+      // organization — i.e. their user doc has a non-empty organizationId and
+      // is not the Admin role. role values are org types like "ISG"/"CSG"/"AO".
+      return isAuthenticated()
+          && currentUserDoc().role != 'Admin'
+          && currentUserDoc().organizationId is string
+          && currentUserDoc().organizationId.size() > 0;
+    }
+
+    // ISG has special visibility over all activity proposals
+    function isISG() {
+      return isOrganizationUser()
+          && get(/databases/$(database)/documents/organizations/$(currentUserDoc().organizationId)).data.type == 'ISG';
+    }
+
+    function belongsToOrg(orgId) {
+      return isAuthenticated() && currentUserDoc().organizationId == orgId;
+    }
+
+    // ── users ──────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Users read their own doc; admins read all; unauthenticated allowed for
+      // getUserByEmail() during forgot-password flow
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin())
+                  || !isAuthenticated();
+
+      // Org users and admins create user docs (admin creates org accounts)
+      allow create: if isAuthenticated()
+                    && request.auth.uid == userId
+                    && request.resource.data.userId == userId;
+
+      // Users update their own doc (not the role field); admins update any
+      allow update: if isAuthenticated() && (
+        (request.auth.uid == userId
+         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+        || isAdmin()
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // ── organizations ──────────────────────────────────────────────────────
+    match /organizations/{organizationId} {
+      allow read:             if true; // needed before login for org lookups
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── equipment (borrowing catalog) ──────────────────────────────────────
+    // Admin-managed catalog of borrowable items. Any authenticated user may
+    // read it (requesters need it for the item picker); only admins write.
+    match /equipment/{equipmentId} {
+      allow read:                   if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── documents ─────────────────────────────────────────────────────────
+    match /documents/{documentId} {
+      function parentDoc() {
+        return get(/databases/$(database)/documents/documents/$(documentId)).data;
+      }
+
+      function canReadParentDoc() {
+        return isAuthenticated() && (
+          isAdmin()
+          || (isOrganizationUser()
+              && parentDoc().organizationId != null
+              && belongsToOrg(parentDoc().organizationId))
+          || (isISG() && parentDoc().documentType == 'activity_proposal')
+          || (parentDoc().direction == 'outgoing' && parentDoc().status == 'released')
+        );
+      }
+
+      allow read: if isAuthenticated() && (
+        isAdmin()
+        // Org users read their own org's documents
+        || (isOrganizationUser()
+            && resource.data.organizationId != null
+            && belongsToOrg(resource.data.organizationId))
+        // ISG reads all activity proposals (pipeline visibility)
+        || (isISG() && resource.data.documentType == 'activity_proposal')
+        // Anyone authenticated can read released outgoing docs (Memorandums)
+        || (resource.data.direction == 'outgoing' && resource.data.status == 'released')
+      );
+
+      allow create: if isAuthenticated() && (
+        // Org user submitting an incoming document for their own org
+        (isOrganizationUser()
+         && request.resource.data.organizationId != null
+         && belongsToOrg(request.resource.data.organizationId)
+         && request.resource.data.submittedBy == request.auth.uid
+         && request.resource.data.status == 'pending')
+        // Admin creating an outgoing document (Memorandum, endorsement letter)
+        || (isAdmin() && request.resource.data.direction == 'outgoing')
+      );
+
+      // Admins change status/assignment; ISG can advance the pipeline on activity proposals;
+      // the requesting org may upload revisions to their own proposal (touching only the
+      // revision-related fields). Org users may also resubmit a returned equipment
+      // borrowing request — restricted to their own doc and only while status is
+      // currently `returned_for_revision`.
+      allow update: if isAdmin()
+                    || (isISG() && resource.data.documentType == 'activity_proposal')
+                    || (
+                      resource.data.documentType == 'activity_proposal'
+                      && isOrganizationUser()
+                      && resource.data.organizationId != null
+                      && belongsToOrg(resource.data.organizationId)
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                        'files', 'revisionCount', 'dateLastRevised', 'lastUpdated'
+                      ])
+                    )
+                    || (
+                      resource.data.documentType == 'equipment_request'
+                      && resource.data.status == 'returned_for_revision'
+                      && isOrganizationUser()
+                      && resource.data.submittedBy == request.auth.uid
+                      && belongsToOrg(resource.data.organizationId)
+                      && request.resource.data.status == 'pending'
+                    );
+      allow delete: if isAdmin();
+
+      // ── comments subcollection ─────────────────────────────────────────
+      // Inline reviewer comments anchored to a region of a PDF file.
+      match /comments/{commentId} {
+        function isOrgForParent() {
+          return isOrganizationUser()
+              && parentDoc().organizationId != null
+              && belongsToOrg(parentDoc().organizationId);
+        }
+
+        // Anyone authorized to read the parent document can read its comments
+        allow read: if canReadParentDoc();
+
+        // Same readers can create comments; the author UID must match the caller
+        allow create: if canReadParentDoc()
+                      && request.resource.data.authorUid == request.auth.uid
+                      && request.resource.data.requirementKey is string
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0;
+
+        // Update permissions:
+        //   - Admin can do anything
+        //   - Comment author can edit/delete their own
+        //   - The comment author OR the requesting org may append a reply
+        //     (only `replies` field changes)
+        //   - The requesting org may bulk-resolve via revision (writes `resolved` +
+        //     `resolvedByRevision` together)
+        //   - Any authorized reader can toggle ONLY the `resolved` flag
+        allow update: if canReadParentDoc() && (
+          isAdmin()
+          || resource.data.authorUid == request.auth.uid
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replies'])
+            && isOrgForParent()
+          )
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved', 'resolvedByRevision'])
+            && isOrgForParent()
+            && request.resource.data.resolved == true
+          )
+          || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved'])
+        );
+
+        allow delete: if isAdmin() || (isAuthenticated() && resource.data.authorUid == request.auth.uid);
+      }
+    }
+
+    // ── documentStatusHistory ──────────────────────────────────────────────
+    match /documentStatusHistory/{historyId} {
+      allow read: if isAuthenticated() && (
+        isAdmin()
+        || (isOrganizationUser()
+            && resource.data.documentId != null
+            && belongsToOrg(
+                 get(/databases/$(database)/documents/documents/$(resource.data.documentId)).data.organizationId
+               ))
+        || (isISG()
+            && get(/databases/$(database)/documents/documents/$(resource.data.documentId)).data.documentType == 'activity_proposal')
+      );
+
+      // Org users create the initial "pending" history entry on submission;
+      // org users also write a no-status-change entry when uploading a revision to their own proposal;
+      // ISG creates history entries when acting on activity proposals
+      allow create: if isAdmin()
+                    || (isOrganizationUser()
+                        && request.resource.data.status == 'pending'
+                        && request.resource.data.changedBy == request.auth.uid
+                        && request.resource.data.previousStatus == null)
+                    || (isOrganizationUser()
+                        && request.resource.data.changedBy == request.auth.uid
+                        && request.resource.data.status == request.resource.data.previousStatus
+                        && request.resource.data.documentId is string
+                        && belongsToOrg(
+                             get(/databases/$(database)/documents/documents/$(request.resource.data.documentId)).data.organizationId
+                           ))
+                    // Equipment request resubmission: org user flips status from
+                    // returned_for_revision back to pending on their own request.
+                    || (isOrganizationUser()
+                        && request.resource.data.status == 'pending'
+                        && request.resource.data.previousStatus == 'returned_for_revision'
+                        && request.resource.data.changedBy == request.auth.uid
+                        && request.resource.data.documentId is string
+                        && belongsToOrg(
+                             get(/databases/$(database)/documents/documents/$(request.resource.data.documentId)).data.organizationId
+                           ))
+                    || (isISG()
+                        && request.resource.data.changedBy == request.auth.uid);
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ── documentCounters ──────────────────────────────────────────────────
+    // Org users need read+write for the Firestore transaction that generates
+    // their incoming document number at submission time.
+    match /documentCounters/{counterId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ── systemCounters ─────────────────────────────────────────────────────
+    // Admins write (Memorandum number, org number); org users read org number
+    // if needed, admins write when creating orgs/outgoing docs.
+    match /systemCounters/{counterId} {
+      allow read:  if isAuthenticated();
+      allow write: if isAdmin() || isOrganizationUser(); // transaction on submission
+    }
+
+    // ── officeProfiles ─────────────────────────────────────────────────────
+    match /officeProfiles/{officeId} {
+      allow read:             if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── reviewTokens ───────────────────────────────────────────────────────
+    // Public read: tokenized review links are consumed without portal login.
+    // Application layer validates token authenticity and expiry.
+    match /reviewTokens/{tokenId} {
+      allow read:   if true;
+      allow write:  if isAdmin();
+    }
+
+    // ── otps ───────────────────────────────────────────────────────────────
+    match /otps/{email} {
+      allow read, write: if true;
+    }
+
+    // ── Default deny ───────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

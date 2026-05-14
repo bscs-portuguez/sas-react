@@ -1,0 +1,379 @@
+.review-page {
+  min-height: 100vh;
+  background-color: #f7f4ee;
+  display: flex;
+  flex-direction: column;
+}
+
+.review-header {
+  background-color: #800020;
+  color: #fff;
+  padding: 1rem 1.5rem;
+}
+
+.review-header-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.review-logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.review-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.review-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.review-main {
+  flex: 1;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.review-card,
+.review-error-card,
+.review-success-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+  padding: 2rem;
+}
+
+.review-error-card h2,
+.review-success-card h2 {
+  margin: 0 0 0.5rem;
+  color: #800020;
+}
+
+.review-error-hint,
+.review-success-hint {
+  color: #666;
+  font-size: 0.9rem;
+  margin-top: 1rem;
+}
+
+.review-card-header {
+  border-bottom: 1px solid #eee;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.review-stage-pill {
+  display: inline-block;
+  background-color: #ffd700;
+  color: #5a4500;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+
+.review-doc-title {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #2a2a2a;
+}
+
+.review-doc-org {
+  margin: 0.25rem 0 0;
+  color: #666;
+}
+
+.review-section {
+  margin-bottom: 1.5rem;
+}
+
+.review-section-title {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #800020;
+  margin: 0 0 0.5rem;
+}
+
+.review-description {
+  margin: 0;
+  white-space: pre-wrap;
+  color: #333;
+  line-height: 1.5;
+}
+
+.review-files-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.review-file-link {
+  display: inline-block;
+  padding: 0.5rem 0.75rem;
+  background: #f5f5dc;
+  border: 1px solid #e6e0c2;
+  border-radius: 6px;
+  color: #800020;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.review-file-link:hover {
+  background: #efe9c8;
+}
+
+button.review-file-link {
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.review-decision-section {
+  border-top: 1px solid #eee;
+  padding-top: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.review-decision-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.review-btn {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 0.65rem 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.review-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.review-btn-approve {
+  background: #fff;
+  color: #15803d;
+  border-color: #15803d;
+}
+
+.review-btn-approve.is-selected,
+.review-btn-approve:hover:not(:disabled) {
+  background: #15803d;
+  color: #fff;
+}
+
+.review-btn-return {
+  background: #fff;
+  color: #b45309;
+  border-color: #b45309;
+}
+
+.review-btn-return.is-selected,
+.review-btn-return:hover:not(:disabled) {
+  background: #b45309;
+  color: #fff;
+}
+
+.review-remarks-group {
+  margin-top: 1rem;
+}
+
+.review-remarks-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  color: #444;
+}
+
+.review-remarks-input {
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 0.65rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.review-form-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  margin-top: 0.75rem;
+}
+
+.review-btn-submit {
+  background: #800020;
+  color: #fff;
+  border-color: #800020;
+  margin-top: 1rem;
+}
+
+.review-btn-submit:hover:not(:disabled) {
+  background: #6a001a;
+}
+
+.review-footer {
+  text-align: center;
+  padding: 1.25rem;
+  color: #777;
+  font-size: 0.85rem;
+}
+
+/* ── Signature preview modal ─────────────────────────────────────────────── */
+
+.review-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.review-modal-card {
+  background: #fff;
+  border-radius: 12px;
+  max-width: 540px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.review-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #eee;
+  padding: 1rem 1.5rem;
+}
+
+.review-modal-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #800020;
+}
+
+.review-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+  line-height: 1;
+}
+
+.review-modal-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.review-modal-body {
+  padding: 1.25rem 1.5rem;
+  overflow-y: auto;
+}
+
+.review-modal-info {
+  margin: 0 0 1rem;
+  color: #444;
+  line-height: 1.5;
+}
+
+.review-modal-footer {
+  border-top: 1px solid #eee;
+  padding: 0.85rem 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.review-btn-secondary {
+  background: #fff;
+  color: #444;
+  border-color: #ccc;
+}
+
+.review-btn-secondary:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.signature-preview-block {
+  border: 1px dashed #aaa;
+  background: #fcfcf7;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.sig-preview-noted {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.sig-preview-image {
+  max-width: 220px;
+  max-height: 80px;
+  display: block;
+  margin: 0;
+}
+
+.sig-preview-line {
+  width: 260px;
+  height: 1px;
+  background: #888;
+  margin: 0.4rem 0 0.5rem;
+}
+
+.sig-preview-name {
+  margin: 0;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.sig-preview-role {
+  margin: 0.1rem 0 0.5rem;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.sig-preview-disclaimer {
+  margin: 0;
+  font-style: italic;
+  font-size: 0.78rem;
+  color: #777;
+}

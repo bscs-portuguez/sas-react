@@ -7,8 +7,109 @@ import Navbar from "../components/Navbar";
 import DashboardLayout from "../components/DashboardLayout";
 import ProposalSubmission from "../components/proposals/ProposalSubmission";
 import LoadingScreen from "../components/LoadingScreen";
+import DocumentPreviewModal from "../components/documents/DocumentPreviewModal";
+import { subscribeToCommentSummary } from "../services/commentService";
+import { formatDate, formatDateTime, getStatusBadgeClass, getStatusLabel, getProposalDisplayStatus, getPipelineStageLabel, getStageOffice } from "../utils/formatters";
+import { REQUIREMENT_LABELS } from "../utils/proposalConstants";
 import "../styles/colors.css";
 import "./ActivityProposalsPage.css";
+
+const ORG_PIPELINE_ORDER = [
+  "isg_endorsement",
+  "sas_review",
+  "vpaa_review",
+  "op_approval",
+  "sas_release",
+  "isg_distribution"
+];
+
+const ISG_PIPELINE_ORDER = [
+  "sas_review",
+  "vpaa_review",
+  "op_approval",
+  "fms_review",
+  "procurement_review",
+  "sas_release"
+];
+
+const getPipelineOrderFor = (proposal) =>
+  proposal?.submitterRole === "ISG" ? ISG_PIPELINE_ORDER : ORG_PIPELINE_ORDER;
+
+const PipelineProgress = ({ proposal }) => {
+  const stagesArr = proposal?.pipeline?.stages || [];
+  const currentStage = proposal?.pipeline?.currentStage;
+  const pipelineOrder = getPipelineOrderFor(proposal);
+
+  const lastEntryByStage = {};
+  stagesArr.forEach((entry) => {
+    if (entry?.stage) lastEntryByStage[entry.stage] = entry;
+  });
+
+  const completedSet = new Set();
+  stagesArr.forEach((entry) => {
+    if (entry?.completedAt && entry?.action && entry.action !== "returned") {
+      completedSet.add(entry.stage);
+    }
+  });
+
+  return (
+    <div className="detail-history-section">
+      <h4 className="history-section-title">Pipeline Progress</h4>
+      <div className="history-timeline">
+        {pipelineOrder.map((stageKey) => {
+          const entry = lastEntryByStage[stageKey];
+          const office = getStageOffice(stageKey);
+          const isCurrent = currentStage === stageKey;
+          const isCompleted = completedSet.has(stageKey);
+          const wasReturned = entry?.action === "returned";
+
+          let stateLabel;
+          let stateClass;
+          if (wasReturned) {
+            stateLabel = `Returned by ${office}`;
+            stateClass = "status-badge-returned";
+          } else if (isCompleted) {
+            stateLabel = `Completed by ${office}`;
+            stateClass = "status-badge-approved";
+          } else if (isCurrent && entry?.firstViewedAt) {
+            stateLabel = `Opened by ${office}`;
+            stateClass = "status-badge-review";
+          } else if (isCurrent) {
+            stateLabel = getPipelineStageLabel(stageKey);
+            stateClass = "status-badge-pending";
+          } else {
+            stateLabel = "Not yet reached";
+            stateClass = "status-badge-default";
+          }
+
+          const timestamp =
+            entry?.completedAt ||
+            entry?.firstViewedAt ||
+            entry?.tokenSentAt ||
+            null;
+
+          return (
+            <div key={stageKey} className="history-item">
+              <div className="history-item-dot"></div>
+              <div className="history-item-content">
+                <div className="history-item-header">
+                  <span className={`status-badge ${stateClass}`}>
+                    {stateLabel}
+                  </span>
+                  {timestamp && (
+                    <span className="history-item-date">
+                      {formatDateTime(timestamp)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const ActivityProposalsPage = () => {
   const [loading, setLoading] = useState(true);
@@ -18,6 +119,17 @@ const ActivityProposalsPage = () => {
   const [showSubmitForm, setShowSubmitForm] = useState(false);
   const [selectedProposal, setSelectedProposal] = useState(null);
   const [selectedProposalHistory, setSelectedProposalHistory] = useState([]);
+  const [previewFile, setPreviewFile] = useState(null);
+  const [commentSummary, setCommentSummary] = useState({ unresolvedReviewerTotal: 0, byRequirement: {} });
+
+  useEffect(() => {
+    if (!selectedProposal?.documentId) {
+      setCommentSummary({ unresolvedReviewerTotal: 0, byRequirement: {} });
+      return;
+    }
+    const unsub = subscribeToCommentSummary(selectedProposal.documentId, setCommentSummary);
+    return () => unsub?.();
+  }, [selectedProposal?.documentId]);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -81,56 +193,6 @@ const ActivityProposalsPage = () => {
     }
   };
 
-  const getStatusBadgeClass = (status) => {
-    const statusClasses = {
-      pending: "status-badge-pending",
-      under_review: "status-badge-review",
-      approved: "status-badge-approved",
-      returned: "status-badge-returned",
-      rejected: "status-badge-rejected",
-      released: "status-badge-released"
-    };
-    return statusClasses[status] || "status-badge-default";
-  };
-
-  const getStatusLabel = (status) => {
-    const statusLabels = {
-      pending: "Pending",
-      under_review: "Under Review",
-      approved: "Approved",
-      returned: "Returned",
-      rejected: "Rejected",
-      released: "Released"
-    };
-    return statusLabels[status] || status;
-  };
-
-  const formatDate = (timestamp) => {
-    if (!timestamp) return "N/A";
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric"
-      });
-    }
-    return "N/A";
-  };
-
-  const formatDateTime = (timestamp) => {
-    if (!timestamp) return "N/A";
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    }
-    return "N/A";
-  };
-
   // Filter proposals based on search, status, and date range
   const filteredProposals = useMemo(() => {
     return proposals.filter((proposal) => {
@@ -182,18 +244,16 @@ const ActivityProposalsPage = () => {
   const organizationName = organizationData?.name || "Organization";
   const userRole = userData?.role || "ISG";
   const userName = userData?.fullName || auth.currentUser?.email || "User";
-  const verificationStatus = userData?.verificationStatus || "unverified";
 
   return (
     <div className="home-container">
       <Navbar
         organizationName={organizationName}
         role={userRole}
-        verificationStatus={verificationStatus}
         userName={userName}
       />
       
-      <DashboardLayout currentPage="activity-proposals">
+      <DashboardLayout currentPage="activity-proposals" orgType={organizationData?.type || null}>
         {loading ? (
           <LoadingScreen compact={true} />
         ) : (
@@ -203,7 +263,6 @@ const ActivityProposalsPage = () => {
             <button 
               className="btn-primary"
               onClick={() => setShowSubmitForm(true)}
-              disabled={verificationStatus !== "verified"}
             >
               + Submit New Proposal
             </button>
@@ -234,10 +293,9 @@ const ActivityProposalsPage = () => {
                   >
                     <option value="all">All Status</option>
                     <option value="pending">Pending</option>
-                    <option value="under_review">Under Review</option>
-                    <option value="approved">Approved</option>
+                    <option value="in_pipeline">In Pipeline</option>
                     <option value="returned">Returned</option>
-                    <option value="rejected">Rejected</option>
+                    <option value="approved">Approved</option>
                     <option value="released">Released</option>
                   </select>
                 </div>
@@ -295,20 +353,24 @@ const ActivityProposalsPage = () => {
                         <th>Proposal Title</th>
                         <th>Date Submitted</th>
                         <th>Status</th>
+                        <th>Last Update</th>
                         <th>Remarks</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredProposals.map((proposal) => (
+                      {filteredProposals.map((proposal) => {
+                      const display = getProposalDisplayStatus(proposal);
+                      return (
                     <tr key={proposal.documentId}>
                       <td className="table-title">{proposal.title}</td>
                       <td>{formatDate(proposal.dateSubmitted)}</td>
                       <td>
-                        <span className={`status-badge ${getStatusBadgeClass(proposal.status)}`}>
-                          {getStatusLabel(proposal.status)}
+                        <span className={`status-badge ${display.badgeClass}`}>
+                          {display.label}
                         </span>
                       </td>
+                      <td>{formatDateTime(proposal.lastUpdated)}</td>
                       <td className="table-remarks">
                         {proposal.remarks ? (
                           <span title={proposal.remarks}>
@@ -327,7 +389,8 @@ const ActivityProposalsPage = () => {
                         </button>
                       </td>
                     </tr>
-                      ))}
+                      );
+                    })}
                     </tbody>
                   </table>
                 </div>
@@ -342,6 +405,8 @@ const ActivityProposalsPage = () => {
                 <ProposalSubmission
                   onSuccess={handleSubmitSuccess}
                   onCancel={() => setShowSubmitForm(false)}
+                  organizationId={organizationData?.organizationId}
+                  orgType={organizationData?.type}
                 />
               </div>
             </div>
@@ -363,9 +428,14 @@ const ActivityProposalsPage = () => {
                       <div className="detail-info">
                         <div className="info-row">
                           <span className="info-label">Status:</span>
-                          <span className={`status-badge ${getStatusBadgeClass(selectedProposal.status)}`}>
-                            {getStatusLabel(selectedProposal.status)}
-                          </span>
+                          {(() => {
+                            const display = getProposalDisplayStatus(selectedProposal);
+                            return (
+                              <span className={`status-badge ${display.badgeClass}`}>
+                                {display.label}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <div className="info-row">
                           <span className="info-label">Document Number:</span>
@@ -391,23 +461,58 @@ const ActivityProposalsPage = () => {
                             <p className="info-remarks">{selectedProposal.remarks}</p>
                           </div>
                         )}
-                        {selectedProposal.fileUrl && (
+                        {selectedProposal.files?.length > 0 && (
                           <div className="info-row-full">
-                            <a
-                              href={selectedProposal.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="file-download-link"
-                            >
-                              📄 Download File: {selectedProposal.fileName}
-                            </a>
+                            <span className="info-label">Attached Documents:</span>
+                            <div className="files-list">
+                              {selectedProposal.files.map((f, i) => {
+                                const counts = commentSummary.byRequirement[f.requirementKey];
+                                const resolvedCount = counts ? counts.total - counts.unresolved : 0;
+                                return (
+                                  <div key={i} className="file-list-item">
+                                    <button
+                                      type="button"
+                                      className="file-download-link file-preview-btn"
+                                      onClick={() => setPreviewFile({
+                                        fileUrl: f.fileUrl,
+                                        fileName: f.fileName,
+                                        title: REQUIREMENT_LABELS[f.requirementKey] || f.fileName,
+                                        documentId: selectedProposal.documentId,
+                                        requirementKey: f.requirementKey,
+                                        fileVersion: f.version || 1,
+                                        previousVersion: f.previousVersion || null,
+                                      })}
+                                    >
+                                      📄 {REQUIREMENT_LABELS[f.requirementKey] || f.fileName}
+                                    </button>
+                                    {counts && counts.total > 0 && (
+                                      <div className="file-comment-counts">
+                                        {counts.unresolved > 0 && (
+                                          <span className="file-comment-pending">
+                                            💬 {counts.unresolved} unresolved
+                                          </span>
+                                        )}
+                                        {resolvedCount > 0 && (
+                                          <span className="file-comment-resolved">
+                                            ✓ {resolvedCount} resolved
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>
 
+                      {/* Pipeline Progress */}
+                      <PipelineProgress proposal={selectedProposal} />
+
                       {/* Status History */}
                       <div className="detail-history-section">
-                        <h4 className="history-section-title">Status History</h4>
+                        <h4 className="history-section-title">Activity Log</h4>
                         {selectedProposalHistory.length === 0 ? (
                           <div className="history-empty">No history available</div>
                         ) : (
@@ -442,6 +547,30 @@ const ActivityProposalsPage = () => {
         </div>
         )}
       </DashboardLayout>
+      {previewFile && (
+        <DocumentPreviewModal
+          key={previewFile.fileUrl}
+          fileUrl={previewFile.fileUrl}
+          fileName={previewFile.fileName}
+          title={previewFile.title}
+          documentId={previewFile.documentId}
+          requirementKey={previewFile.requirementKey}
+          fileVersion={previewFile.fileVersion}
+          previousVersion={previewFile.previousVersion}
+          currentUser={userData ? {
+            uid: auth.currentUser?.uid,
+            name: userData.fullName || userData.name,
+            role: userData.userRole || userData.role,
+          } : null}
+          viewerRole="org"
+          onRevisionUploaded={() => {
+            if (selectedProposal?.documentId) {
+              handleViewProposal(selectedProposal.documentId);
+            }
+          }}
+          onClose={() => setPreviewFile(null)}
+        />
+      )}
     </div>
   );
 };

@@ -1,13 +1,12 @@
 import { useState, useEffect } from "react";
 import { auth } from "../config/firebase";
 import { signOut } from "firebase/auth";
-import { getUserById, updateUserPassword, updateUserEmail, submitVerificationDocument, deleteUserAccount } from "../services/userService";
+import { getUserById, updateUserPassword, updateUserEmail, deleteUserAccount } from "../services/userService";
 import { getOrganizationById } from "../services/organizationService";
-import { uploadVerificationDocument, deleteVerificationDocument } from "../services/storageService";
 import Navbar from "../components/Navbar";
 import DashboardLayout from "../components/DashboardLayout";
 import LoadingScreen from "../components/LoadingScreen";
-import StatusBanner from "../components/StatusBanner";
+import { formatDateTime } from "../utils/formatters";
 import "../styles/colors.css";
 import "./ProfilePage.css";
 
@@ -31,12 +30,6 @@ const ProfilePage = () => {
   const [emailError, setEmailError] = useState("");
   const [emailSuccess, setEmailSuccess] = useState("");
   const [updatingEmail, setUpdatingEmail] = useState(false);
-  
-  // Verification document upload state
-  const [uploadingDocument, setUploadingDocument] = useState(false);
-  const [uploadError, setUploadError] = useState("");
-  const [uploadSuccess, setUploadSuccess] = useState("");
-  const [selectedFile, setSelectedFile] = useState(null);
   
   // Account actions state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -132,66 +125,6 @@ const ProfilePage = () => {
     }
   };
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-      setUploadError("");
-    }
-  };
-
-  const handleVerificationSubmit = async () => {
-    if (!selectedFile) {
-      setUploadError("Please select a file to upload");
-      return;
-    }
-
-    setUploadError("");
-    setUploadSuccess("");
-    setUploadingDocument(true);
-
-    try {
-      const user = auth.currentUser;
-      if (!user) {
-        throw new Error("User not authenticated");
-      }
-
-      // Delete old document if exists
-      if (userData?.verificationDocumentUrl) {
-        try {
-          await deleteVerificationDocument(userData.verificationDocumentUrl);
-        } catch (error) {
-          console.warn("Error deleting old document:", error);
-          // Continue with upload even if deletion fails
-        }
-      }
-
-      // Upload new document
-      const documentUrl = await uploadVerificationDocument(selectedFile, user.uid);
-      
-      // Update user document
-      await submitVerificationDocument(user.uid, documentUrl);
-      
-      setUploadSuccess("Verification document submitted successfully. Your account is now pending verification.");
-      setSelectedFile(null);
-      
-      // Refresh user data
-      const userDoc = await getUserById(user.uid);
-      setUserData(userDoc);
-      
-      // Reset file input
-      const fileInput = document.getElementById("verification-file");
-      if (fileInput) {
-        fileInput.value = "";
-      }
-    } catch (error) {
-      console.error("Error submitting verification document:", error);
-      setUploadError(error.message || "Failed to upload document. Please try again.");
-    } finally {
-      setUploadingDocument(false);
-    }
-  };
-
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -207,16 +140,6 @@ const ProfilePage = () => {
     setDeletingAccount(true);
 
     try {
-      // Delete verification document if exists
-      if (userData?.verificationDocumentUrl) {
-        try {
-          await deleteVerificationDocument(userData.verificationDocumentUrl);
-        } catch (error) {
-          console.warn("Error deleting verification document:", error);
-          // Continue with account deletion even if document deletion fails
-        }
-      }
-
       // Delete user account
       await deleteUserAccount();
       
@@ -230,60 +153,15 @@ const ProfilePage = () => {
     }
   };
 
-  const formatDate = (timestamp) => {
-    if (!timestamp) return "N/A";
-    if (timestamp.toDate) {
-      return timestamp.toDate().toLocaleString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    }
-    return "N/A";
-  };
-
-  const getVerificationStatusLabel = (status) => {
-    const labels = {
-      unverified: "Unverified",
-      pending: "Pending Verification",
-      verified: "Verified",
-      rejected: "Rejected"
-    };
-    return labels[status] || status;
-  };
-
-  const getVerificationStatusClass = (status) => {
-    const classes = {
-      unverified: "status-unverified",
-      pending: "status-pending",
-      verified: "status-verified",
-      rejected: "status-rejected"
-    };
-    return classes[status] || "";
-  };
-
-  const getStatusBadgeClass = (status) => {
-    const statusClasses = {
-      unverified: "status-badge-pending",
-      pending: "status-badge-pending",
-      verified: "status-badge-approved",
-      rejected: "status-badge-rejected"
-    };
-    return statusClasses[status] || "status-badge-default";
-  };
-
   if (loading) {
     return (
       <div className="home-container">
         <Navbar
           organizationName={organizationData?.name || "Organization"}
           role={userData?.role || "ISG"}
-          verificationStatus={userData?.verificationStatus || "unverified"}
           userName={userData?.fullName || auth.currentUser?.email || "User"}
         />
-        <DashboardLayout currentPage="profile">
+        <DashboardLayout currentPage="profile" orgType={organizationData?.type || null}>
           <LoadingScreen compact={true} />
         </DashboardLayout>
       </div>
@@ -293,38 +171,23 @@ const ProfilePage = () => {
   const organizationName = organizationData?.name || "Organization";
   const userRole = userData?.role || "ISG";
   const userName = userData?.fullName || auth.currentUser?.email || "User";
-  const verificationStatus = userData?.verificationStatus || "unverified";
-  const isVerified = verificationStatus === "verified";
-  const isUnverified = verificationStatus === "unverified";
-  const isPending = verificationStatus === "pending";
 
   return (
     <div className="home-container">
       <Navbar
         organizationName={organizationName}
         role={userRole}
-        verificationStatus={verificationStatus}
         userName={userName}
       />
       
-      <DashboardLayout currentPage="profile">
+      <DashboardLayout currentPage="profile" orgType={organizationData?.type || null}>
         <div className="profile-page">
-          {/* Status Banner for Unverified Users */}
-          {!isVerified && (
-            <StatusBanner verificationStatus={verificationStatus} />
-          )}
-
           {/* Profile Header */}
           <div className="profile-header">
             <div className="profile-header-content">
               <div>
                 <h1 className="profile-name">{userData?.fullName || "User"}</h1>
                 <p className="profile-role">{userRole} - {userData?.userRole || "Member"}</p>
-              </div>
-              <div className="verification-badge-container">
-                <span className={`status-badge ${getStatusBadgeClass(verificationStatus)}`}>
-                  {getVerificationStatusLabel(verificationStatus)}
-                </span>
               </div>
             </div>
           </div>
@@ -502,132 +365,21 @@ const ProfilePage = () => {
               )}
             </div>
 
-            {/* Verification Section */}
-            <div className="profile-section">
-              <h2 className="section-title">Verification</h2>
-              
-              {isVerified ? (
-                <div className="verification-verified">
-                  <div className="verification-status-info">
-                    <div className="info-item">
-                      <label className="info-label">Status</label>
-                      <div className={`info-value ${getVerificationStatusClass(verificationStatus)}`}>
-                        {getVerificationStatusLabel(verificationStatus)}
-                      </div>
-                    </div>
-                    {userData?.verificationDocumentUrl && (
-                      <div className="info-item">
-                        <label className="info-label">Verification Document</label>
-                        <div className="info-value">
-                          <a
-                            href={userData.verificationDocumentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="document-link"
-                          >
-                            📄 View Verification Document
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="verification-unverified">
-                  <div className="verification-status-info">
-                    <div className="info-item">
-                      <label className="info-label">Status</label>
-                      <div className={`info-value ${getVerificationStatusClass(verificationStatus)}`}>
-                        {getVerificationStatusLabel(verificationStatus)}
-                      </div>
-                    </div>
-                    {userData?.verificationDocumentUrl && (
-                      <div className="info-item">
-                        <label className="info-label">Submitted Document</label>
-                        <div className="info-value">
-                          <a
-                            href={userData.verificationDocumentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="document-link"
-                          >
-                            📄 View Current Document
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {uploadError && (
-                    <div className="form-error">{uploadError}</div>
-                  )}
-                  {uploadSuccess && (
-                    <div className="form-success">{uploadSuccess}</div>
-                  )}
-
-                  <div className="verification-upload-section">
-                    <div className="form-group">
-                      <label htmlFor="verification-file" className="form-label">
-                        Verification Document <span className="required">*</span>
-                      </label>
-                      <input
-                        type="file"
-                        id="verification-file"
-                        className="form-input-file"
-                        accept="image/*,.pdf"
-                        onChange={handleFileSelect}
-                        disabled={uploadingDocument || isPending}
-                      />
-                      <span className="form-hint">
-                        Accepted formats: JPG, PNG, PDF (Max 10MB)
-                        {isPending && " - Submission is pending review"}
-                      </span>
-                    </div>
-
-                    {selectedFile && (
-                      <div className="file-selected">
-                        <span>Selected: {selectedFile.name}</span>
-                        <button
-                          type="button"
-                          className="btn-link-small"
-                          onClick={() => {
-                            setSelectedFile(null);
-                            const fileInput = document.getElementById("verification-file");
-                            if (fileInput) fileInput.value = "";
-                          }}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )}
-
-                    <button
-                      className="btn-primary"
-                      onClick={handleVerificationSubmit}
-                      disabled={!selectedFile || uploadingDocument || isPending}
-                    >
-                      {uploadingDocument ? "Uploading..." : "Submit Verification"}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Account History Section */}
             <div className="profile-section">
               <h2 className="section-title">Account History</h2>
               <div className="profile-info-grid">
                 <div className="info-item">
                   <label className="info-label">Date Created</label>
-                  <div className="info-value">{formatDate(userData?.dateCreated)}</div>
+                  <div className="info-value">{formatDateTime(userData?.dateCreated)}</div>
                 </div>
                 <div className="info-item">
                   <label className="info-label">Last Updated</label>
-                  <div className="info-value">{formatDate(userData?.lastUpdated)}</div>
+                  <div className="info-value">{formatDateTime(userData?.lastUpdated)}</div>
                 </div>
                 <div className="info-item">
                   <label className="info-label">Last Login</label>
-                  <div className="info-value">{formatDate(userData?.lastLogin)}</div>
+                  <div className="info-value">{formatDateTime(userData?.lastLogin)}</div>
                 </div>
               </div>
             </div>

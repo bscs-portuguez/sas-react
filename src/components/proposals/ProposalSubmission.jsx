@@ -1,113 +1,124 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { auth } from "../../config/firebase";
-import { getUserById } from "../../services/userService";
-import { submitDocument } from "../../services/documentService";
+import { submitActivityProposal } from "../../services/documentService";
+import {
+  REQUIREMENT_KEYS,
+  REQUIREMENT_LABELS,
+  getRequiredKeys,
+  isConditionalKey,
+  isISGSubmitter,
+} from "../../utils/proposalConstants";
 import "../../styles/colors.css";
 import "./ProposalSubmission.css";
 
-const ProposalSubmission = ({ onSuccess, onCancel }) => {
-  const [loading, setLoading] = useState(false);
-  const [userData, setUserData] = useState(null);
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    file: null
+const ALLOWED_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+
+const ProposalSubmission = ({ onSuccess, onCancel, organizationId, orgType }) => {
+  const isISG = isISGSubmitter(orgType);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [proposalFlags, setProposalFlags] = useState({
+    hasSpeakers: false,
+    collectsFees: false,
   });
+  const [uploadedFiles, setUploadedFiles] = useState({});
   const [error, setError] = useState("");
-  const [filePreview, setFilePreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const user = auth.currentUser;
-        if (!user) return;
+  const requiredKeys = getRequiredKeys(proposalFlags, { isISG });
+  const uploadedCount = requiredKeys.filter((k) => uploadedFiles[k]).length;
+  const isComplete =
+    uploadedCount === requiredKeys.length && title.trim();
 
-        const userDoc = await getUserById(user.uid);
-        setUserData(userDoc);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setError("Failed to load form data");
+  const handleFlagChange = (flag) => {
+    const next = { ...proposalFlags, [flag]: !proposalFlags[flag] };
+    setProposalFlags(next);
+    // Remove file for the key that just became optional
+    const nowRequired = getRequiredKeys(next);
+    setUploadedFiles((prev) => {
+      const cleaned = { ...prev };
+      for (const key of Object.keys(cleaned)) {
+        if (isConditionalKey(key) && !nowRequired.includes(key)) {
+          delete cleaned[key];
+        }
       }
-    };
+      return cleaned;
+    });
+  };
 
-    fetchData();
-  }, []);
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const allowedTypes = [
-        "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-      ];
-      
-      if (!allowedTypes.includes(file.type)) {
-        setError("Invalid file type. Please upload a PDF or Word document (.pdf, .doc, .docx)");
-        return;
-      }
-
-      if (file.size > 50 * 1024 * 1024) {
-        setError("File size exceeds 50MB limit. Please upload a smaller file.");
-        return;
-      }
-
-      setFormData({ ...formData, file });
-      setFilePreview(file.name);
-      setError("");
+  const handleFileSelect = (requirementKey, file) => {
+    if (!file) return;
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setError(
+        `Invalid file type for "${REQUIREMENT_LABELS[requirementKey]}". Upload PDF or Word (.pdf, .doc, .docx).`
+      );
+      return;
     }
+    if (file.size > 50 * 1024 * 1024) {
+      setError(
+        `File too large: "${REQUIREMENT_LABELS[requirementKey]}". Maximum 50 MB.`
+      );
+      return;
+    }
+    setError("");
+    setUploadedFiles((prev) => ({ ...prev, [requirementKey]: file }));
+  };
+
+  const handleFileRemove = (requirementKey) => {
+    setUploadedFiles((prev) => {
+      const next = { ...prev };
+      delete next[requirementKey];
+      return next;
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (!title.trim()) {
+      setError("Please enter a proposal title.");
+      return;
+    }
+    if (uploadedCount < requiredKeys.length) {
+      setError(
+        `Please upload all required documents. ${uploadedCount} of ${requiredKeys.length} uploaded.`
+      );
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user || !organizationId) {
+      setError("Session expired. Please refresh and try again.");
+      return;
+    }
+
     setLoading(true);
+    setUploadStatus(`Uploading documents (0 / ${Object.keys(uploadedFiles).length})…`);
 
     try {
-      if (!formData.title.trim()) {
-        throw new Error("Please enter a proposal title");
-      }
-      if (formData.title.length > 200) {
-        throw new Error("Title must be 200 characters or less");
-      }
-      if (!formData.description.trim()) {
-        throw new Error("Please enter a proposal description");
-      }
-      if (formData.description.length > 1000) {
-        throw new Error("Description must be 1000 characters or less");
-      }
-      if (!formData.file) {
-        throw new Error("Please upload a proposal file");
-      }
+      await submitActivityProposal(
+        {
+          title,
+          description,
+          proposalFlags,
+          submitterRole: orgType || null,
+        },
+        uploadedFiles,
+        user.uid,
+        organizationId
+      );
 
-      const user = auth.currentUser;
-      if (!user || !userData?.organizationId) {
-        throw new Error("User or organization information not found");
-      }
-
-      const documentData = {
-        documentType: "activity_proposal",
-        title: formData.title.trim(),
-        description: formData.description.trim(),
-        direction: "incoming"
-      };
-
-      await submitDocument(documentData, formData.file, user.uid);
-
-      // Reset form
-      setFormData({
-        title: "",
-        description: "",
-        file: null
-      });
-      setFilePreview(null);
-
-      if (onSuccess) {
-        onSuccess();
-      }
-    } catch (error) {
-      console.error("Error submitting proposal:", error);
-      setError(error.message || "Failed to submit proposal. Please try again.");
+      setUploadStatus("");
+      if (onSuccess) onSuccess();
+    } catch (err) {
+      setError(err.message || "Failed to submit proposal. Please try again.");
+      setUploadStatus("");
     } finally {
       setLoading(false);
     }
@@ -118,89 +129,194 @@ const ProposalSubmission = ({ onSuccess, onCancel }) => {
       <div className="proposal-submission-header">
         <h2>Submit New Activity Proposal</h2>
         {onCancel && (
-          <button className="close-button" onClick={onCancel}>×</button>
+          <button type="button" className="close-button" onClick={onCancel}>
+            ×
+          </button>
         )}
       </div>
 
       <form onSubmit={handleSubmit} className="proposal-submission-form">
-        {error && (
-          <div className="form-error">{error}</div>
-        )}
+        {error && <div className="form-error">{error}</div>}
 
-        <div className="form-group">
-          <label htmlFor="title" className="form-label">
-            Proposal Title <span className="required">*</span>
-          </label>
-          <input
-            type="text"
-            id="title"
-            className="form-input"
-            value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-            placeholder="Enter proposal title"
-            maxLength={200}
-            required
-          />
-          <span className="form-hint">{formData.title.length}/200 characters</span>
-        </div>
+        {/* ── Section 1: Proposal Information ──────────────────── */}
+        <div className="form-section">
+          <h3 className="form-section-title">1. Proposal Information</h3>
 
-        <div className="form-group">
-          <label htmlFor="description" className="form-label">
-            Description <span className="required">*</span>
-          </label>
-          <textarea
-            id="description"
-            className="form-textarea"
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            placeholder="Describe your activity proposal in detail..."
-            rows={6}
-            maxLength={1000}
-            required
-          />
-          <span className="form-hint">{formData.description.length}/1000 characters</span>
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="file" className="form-label">
-            Proposal File <span className="required">*</span>
-          </label>
-          <div className="file-upload-area">
-            <input
-              type="file"
-              id="file"
-              className="file-input"
-              accept=".pdf,.doc,.docx"
-              onChange={handleFileChange}
-              required
-            />
-            <label htmlFor="file" className="file-label">
-              {filePreview ? (
-                <span className="file-preview">📄 {filePreview}</span>
-              ) : (
-                <span className="file-placeholder">
-                  <span className="file-icon">📎</span>
-                  <span>Click to upload or drag and drop</span>
-                  <span className="file-hint">PDF, DOC, DOCX (Max 50MB)</span>
-                </span>
-              )}
+          <div className="form-group">
+            <label htmlFor="title" className="form-label">
+              Activity / Event Title <span className="required">*</span>
             </label>
-            {filePreview && (
-              <button
-                type="button"
-                className="file-remove"
-                onClick={() => {
-                  setFormData({ ...formData, file: null });
-                  setFilePreview(null);
-                }}
-              >
-                Remove
-              </button>
-            )}
+            <input
+              type="text"
+              id="title"
+              className="form-input"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Enter the name of your activity or event"
+              maxLength={200}
+              disabled={loading}
+            />
+            <span className="form-hint">{title.length}/200 characters</span>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="description" className="form-label">
+              Description
+            </label>
+            <textarea
+              id="description"
+              className="form-textarea"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Briefly describe the nature and objectives of the activity…"
+              rows={4}
+              maxLength={1000}
+              disabled={loading}
+            />
+            <span className="form-hint">
+              {description.length}/1000 characters
+            </span>
+          </div>
+
+        </div>
+
+        {/* ── Section 2: Event Type ─────────────────────────────── */}
+        <div className="form-section">
+          <h3 className="form-section-title">2. Event Type</h3>
+          <p className="form-section-hint">
+            Check all that apply — this determines which supporting documents
+            are required.
+          </p>
+
+          <div className="flag-options">
+            <label className="flag-option">
+              <input
+                type="checkbox"
+                checked={proposalFlags.hasSpeakers}
+                onChange={() => handleFlagChange("hasSpeakers")}
+                disabled={loading}
+              />
+              <span className="flag-label">
+                This event involves speakers or facilitators
+                <span className="flag-sublabel">
+                  Adds: Profile of Speakers/Facilitators
+                </span>
+              </span>
+            </label>
+
+            <label className="flag-option">
+              <input
+                type="checkbox"
+                checked={proposalFlags.collectsFees}
+                onChange={() => handleFlagChange("collectsFees")}
+                disabled={loading}
+              />
+              <span className="flag-label">
+                This event will collect registration / participation fees
+                <span className="flag-sublabel">
+                  Adds: Resolution on fee collection + minutes of meeting
+                </span>
+              </span>
+            </label>
           </div>
         </div>
 
+        {/* ── Section 3: Required Documents ────────────────────── */}
+        <div className="form-section">
+          <div className="checklist-header">
+            <h3 className="form-section-title">3. Required Documents</h3>
+            <span
+              className={`checklist-progress ${
+                isComplete ? "checklist-progress--done" : ""
+              }`}
+            >
+              {uploadedCount} / {requiredKeys.length} uploaded
+            </span>
+          </div>
+          <p className="form-section-hint">
+            All listed documents must be uploaded before submitting. PDF or
+            Word files only, max 50 MB each.
+          </p>
+
+          <div className="requirement-list">
+            {REQUIREMENT_KEYS.map((key) => {
+              const isRequired = requiredKeys.includes(key);
+              const isConditional = isConditionalKey(key);
+              const file = uploadedFiles[key];
+
+              if (isConditional && !isRequired) return null;
+
+              return (
+                <div
+                  key={key}
+                  className={`requirement-row ${file ? "requirement-row--done" : ""} ${isConditional ? "requirement-row--conditional" : ""}`}
+                >
+                  <div className="requirement-status">
+                    {file ? (
+                      <span className="req-icon req-icon--done">✓</span>
+                    ) : (
+                      <span className="req-icon req-icon--empty" />
+                    )}
+                  </div>
+
+                  <div className="requirement-info">
+                    <span className="requirement-label">
+                      {REQUIREMENT_LABELS[key]}
+                    </span>
+                    {isConditional && (
+                      <span className="badge-conditional">conditional</span>
+                    )}
+                  </div>
+
+                  <div className="requirement-upload">
+                    {file ? (
+                      <>
+                        <span className="file-name-display" title={file.name}>
+                          {file.name.length > 30
+                            ? `${file.name.substring(0, 28)}…`
+                            : file.name}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-remove-file"
+                          onClick={() => handleFileRemove(key)}
+                          disabled={loading}
+                        >
+                          Remove
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          type="file"
+                          id={`file-${key}`}
+                          className="file-input-hidden"
+                          accept=".pdf,.doc,.docx"
+                          onChange={(e) =>
+                            handleFileSelect(key, e.target.files[0])
+                          }
+                          disabled={loading}
+                        />
+                        <label
+                          htmlFor={`file-${key}`}
+                          className="btn-upload-file"
+                        >
+                          Upload
+                        </label>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Actions ──────────────────────────────────────────── */}
         <div className="form-actions">
+          {uploadStatus && (
+            <span className="upload-status">{uploadStatus}</span>
+          )}
           {onCancel && (
             <button
               type="button"
@@ -214,9 +330,9 @@ const ProposalSubmission = ({ onSuccess, onCancel }) => {
           <button
             type="submit"
             className="btn-primary"
-            disabled={loading}
+            disabled={loading || !isComplete}
           >
-            {loading ? "Submitting..." : "Submit Proposal"}
+            {loading ? "Submitting…" : "Submit Proposal"}
           </button>
         </div>
       </form>
@@ -225,4 +341,3 @@ const ProposalSubmission = ({ onSuccess, onCancel }) => {
 };
 
 export default ProposalSubmission;
-

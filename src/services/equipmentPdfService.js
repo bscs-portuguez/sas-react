@@ -18,6 +18,7 @@ const GRAY = rgb(0.4, 0.4, 0.4);
 const PAGE_WIDTH = 612; // US Letter
 const PAGE_HEIGHT = 792;
 const MARGIN = 50;
+const FOOTER_RESERVE = 30; // space reserved at the bottom for "Page X of Y"
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
 const formatDateForPdf = (raw) => {
@@ -68,6 +69,7 @@ class PdfBuilder {
     this.page = null;
     this.font = null;
     this.bold = null;
+    this.italic = null;
     this.y = 0;
   }
 
@@ -75,6 +77,7 @@ class PdfBuilder {
     this.doc = await PDFDocument.create();
     this.font = await this.doc.embedFont(StandardFonts.Helvetica);
     this.bold = await this.doc.embedFont(StandardFonts.HelveticaBold);
+    this.italic = await this.doc.embedFont(StandardFonts.HelveticaOblique);
     this.newPage();
   }
 
@@ -84,48 +87,49 @@ class PdfBuilder {
   }
 
   ensureSpace(height) {
-    if (this.y - height < MARGIN) {
+    if (this.y - height < MARGIN + FOOTER_RESERVE) {
       this.newPage();
     }
   }
 
-  drawHeader(title) {
-    this.ensureSpace(80);
-    this.page.drawText("EULOGIO \"AMANG\" RODRIGUEZ", {
-      x: MARGIN,
+  drawCenteredText(text, { size = 10, font = this.font, color = BLACK } = {}) {
+    const w = font.widthOfTextAtSize(text, size);
+    this.page.drawText(text, {
+      x: (PAGE_WIDTH - w) / 2,
       y: this.y,
+      size,
+      font,
+      color,
+    });
+  }
+
+  drawHeader(title) {
+    this.ensureSpace(96);
+    this.drawCenteredText("EULOGIO \"AMANG\" RODRIGUEZ", {
       size: 14,
       font: this.bold,
       color: MAROON,
     });
     this.y -= 16;
-    this.page.drawText("INSTITUTE OF SCIENCE AND TECHNOLOGY", {
-      x: MARGIN,
-      y: this.y,
+    this.drawCenteredText("INSTITUTE OF SCIENCE AND TECHNOLOGY", {
       size: 12,
       font: this.bold,
       color: MAROON,
     });
     this.y -= 13;
-    this.page.drawText("Nagtahan, Sampaloc, Manila", {
-      x: MARGIN,
-      y: this.y,
+    this.drawCenteredText("Nagtahan, Sampaloc, Manila", {
       size: 9,
       font: this.font,
       color: GRAY,
     });
     this.y -= 22;
-    this.page.drawText("STUDENT AFFAIRS AND SERVICES", {
-      x: MARGIN,
-      y: this.y,
+    this.drawCenteredText("STUDENT AFFAIRS AND SERVICES", {
       size: 14,
       font: this.bold,
       color: BLACK,
     });
     this.y -= 16;
-    this.page.drawText(title, {
-      x: MARGIN,
-      y: this.y,
+    this.drawCenteredText(title, {
       size: 11,
       font: this.bold,
       color: BLACK,
@@ -145,7 +149,7 @@ class PdfBuilder {
   }
 
   drawSectionTitle(label) {
-    this.ensureSpace(20);
+    this.ensureSpace(24);
     this.page.drawText(label, {
       x: MARGIN,
       y: this.y,
@@ -190,50 +194,6 @@ class PdfBuilder {
     this.y -= blockHeight + 2;
   }
 
-  drawTwoColumn(rows) {
-    const colW = CONTENT_WIDTH / 2 - 8;
-    for (const [left, right] of rows) {
-      this.ensureSpace(16);
-      const startY = this.y;
-      if (left) {
-        this.drawField(left.label, left.value, { width: colW });
-      }
-      const leftEndY = this.y;
-      this.y = startY;
-      if (right) {
-        const savedYBefore = this.y;
-        this.page.drawText(`${right.label}:`, {
-          x: MARGIN + CONTENT_WIDTH / 2 + 8,
-          y: savedYBefore,
-          size: 9,
-          font: this.bold,
-          color: GRAY,
-        });
-        const rLabelW =
-          this.bold.widthOfTextAtSize(`${right.label}:`, 9) + 6;
-        const rLines = wrapText(
-          right.value || "",
-          this.font,
-          10,
-          colW - rLabelW
-        );
-        rLines.forEach((line, i) => {
-          this.page.drawText(line, {
-            x: MARGIN + CONTENT_WIDTH / 2 + 8 + rLabelW,
-            y: savedYBefore - i * 13,
-            size: 10,
-            font: this.font,
-            color: BLACK,
-          });
-        });
-        const rightEndY = savedYBefore - rLines.length * 13 - 2;
-        this.y = Math.min(leftEndY, rightEndY);
-      } else {
-        this.y = leftEndY;
-      }
-    }
-  }
-
   drawItemsTable(items) {
     const cols = [
       { label: "Item Description", x: MARGIN, width: 230 },
@@ -242,26 +202,36 @@ class PdfBuilder {
       { label: "Remarks", x: MARGIN + 390, width: CONTENT_WIDTH - 390 },
     ];
 
-    this.ensureSpace(22);
+    const HEADER_HEIGHT = 14;
+    const LINE_HEIGHT = 11;
+    const ROW_VPAD = 6; // total vertical padding inside a row
+
+    // need at least header + separator + one row
+    this.ensureSpace(HEADER_HEIGHT + LINE_HEIGHT + ROW_VPAD + 4);
+
+    // header row baseline (text drawn below current y)
+    const headerBaseline = this.y - HEADER_HEIGHT + 3;
     cols.forEach((c) => {
       this.page.drawText(c.label, {
         x: c.x + 4,
-        y: this.y,
+        y: headerBaseline,
         size: 8,
         font: this.bold,
         color: GRAY,
       });
     });
-    this.y -= 10;
+    this.y -= HEADER_HEIGHT;
+
+    // separator under headers
     this.page.drawLine({
       start: { x: MARGIN, y: this.y },
       end: { x: PAGE_WIDTH - MARGIN, y: this.y },
       thickness: 0.5,
       color: GRAY,
     });
-    this.y -= 4;
 
     if (!items || items.length === 0) {
+      this.y -= LINE_HEIGHT + 4;
       this.page.drawText("(no items)", {
         x: MARGIN + 4,
         y: this.y,
@@ -269,7 +239,7 @@ class PdfBuilder {
         font: this.font,
         color: GRAY,
       });
-      this.y -= 14;
+      this.y -= 8;
       return;
     }
 
@@ -278,17 +248,21 @@ class PdfBuilder {
         wrapText(it.name || "", this.font, 9, cols[0].width - 6).length,
         wrapText(String(it.quantity ?? ""), this.font, 9, cols[1].width - 6).length,
         wrapText(it.conditionBefore || "", this.font, 9, cols[2].width - 6).length,
-        wrapText(it.remarks || "", this.font, 9, cols[3].width - 6).length
+        wrapText(it.remarks || "", this.font, 9, cols[3].width - 6).length,
+        1
       );
-      const rowHeight = rowLines * 11 + 6;
+      const rowHeight = rowLines * LINE_HEIGHT + ROW_VPAD;
       this.ensureSpace(rowHeight);
+
+      // first text baseline sits ROW_VPAD/2 + 2 below the top of the row
+      const firstBaseline = this.y - (ROW_VPAD / 2) - 8;
 
       const drawCell = (col, text) => {
         const lines = wrapText(text || "", this.font, 9, col.width - 6);
         lines.forEach((line, i) => {
           this.page.drawText(line, {
             x: col.x + 4,
-            y: this.y - i * 11,
+            y: firstBaseline - i * LINE_HEIGHT,
             size: 9,
             font: this.font,
             color: BLACK,
@@ -302,14 +276,16 @@ class PdfBuilder {
       drawCell(cols[3], it.remarks || "");
 
       this.y -= rowHeight;
+
+      // row separator at the bottom of the row, fully clear of the text
       this.page.drawLine({
-        start: { x: MARGIN, y: this.y + 2 },
-        end: { x: PAGE_WIDTH - MARGIN, y: this.y + 2 },
+        start: { x: MARGIN, y: this.y },
+        end: { x: PAGE_WIDTH - MARGIN, y: this.y },
         thickness: 0.3,
         color: GRAY,
       });
     }
-    this.y -= 4;
+    this.y -= 6;
   }
 
   drawTerms(terms) {
@@ -330,8 +306,76 @@ class PdfBuilder {
     });
   }
 
+  drawCenteredAcknowledgement(text) {
+    const size = 9;
+    const lines = wrapText(text, this.italic, size, CONTENT_WIDTH - 40);
+    const lineHeight = 12;
+    this.ensureSpace(lines.length * lineHeight + 6);
+    lines.forEach((line) => {
+      const w = this.italic.widthOfTextAtSize(line, size);
+      this.page.drawText(line, {
+        x: (PAGE_WIDTH - w) / 2,
+        y: this.y,
+        size,
+        font: this.italic,
+        color: BLACK,
+      });
+      this.y -= lineHeight;
+    });
+    this.y -= 6;
+  }
+
+  drawAcknowledgementSignature(requestorName) {
+    this.ensureSpace(50);
+    this.y -= 6;
+
+    const sigLabel = "Signature of Requestor over printed name:";
+    const sigLabelWidth = this.font.widthOfTextAtSize(sigLabel, 9);
+    this.page.drawText(sigLabel, {
+      x: MARGIN,
+      y: this.y,
+      size: 9,
+      font: this.font,
+      color: BLACK,
+    });
+    const sigLineStart = MARGIN + sigLabelWidth + 6;
+    this.page.drawLine({
+      start: { x: sigLineStart, y: this.y - 2 },
+      end: { x: PAGE_WIDTH - MARGIN, y: this.y - 2 },
+      thickness: 0.5,
+      color: BLACK,
+    });
+    if (requestorName) {
+      this.page.drawText(requestorName, {
+        x: sigLineStart + 4,
+        y: this.y,
+        size: 9,
+        font: this.font,
+        color: BLACK,
+      });
+    }
+    this.y -= 20;
+
+    const dateLabel = "Date:";
+    const dateLabelW = this.font.widthOfTextAtSize(dateLabel, 9);
+    this.page.drawText(dateLabel, {
+      x: MARGIN,
+      y: this.y,
+      size: 9,
+      font: this.font,
+      color: BLACK,
+    });
+    this.page.drawLine({
+      start: { x: MARGIN + dateLabelW + 6, y: this.y - 2 },
+      end: { x: MARGIN + 220, y: this.y - 2 },
+      thickness: 0.5,
+      color: BLACK,
+    });
+    this.y -= 18;
+  }
+
   drawSignatureRow(label, name, date) {
-    this.ensureSpace(40);
+    this.ensureSpace(44);
     const colWidth = CONTENT_WIDTH / 2 - 10;
 
     this.page.drawText(label, {
@@ -390,10 +434,28 @@ class PdfBuilder {
       font: this.font,
       color: GRAY,
     });
-    this.y -= 14;
+    this.y -= 16;
+  }
+
+  drawPageFooters() {
+    const pages = this.doc.getPages();
+    const total = pages.length;
+    pages.forEach((p, i) => {
+      const text = `Page ${i + 1} of ${total}`;
+      const size = 9;
+      const w = this.font.widthOfTextAtSize(text, size);
+      p.drawText(text, {
+        x: (PAGE_WIDTH - w) / 2,
+        y: 24,
+        size,
+        font: this.font,
+        color: GRAY,
+      });
+    });
   }
 
   async save() {
+    this.drawPageFooters();
     return this.doc.save();
   }
 }
@@ -405,6 +467,9 @@ const TERMS = [
   "Borrowed items shall be used only for the stated purpose and within the approved venue.",
   "The requesting party agrees to comply with all institutional guidelines on equipment use.",
 ];
+
+const ACK_TEXT =
+  "I hereby acknowledge that I am responsible for the borrowed items and shall ensure their proper use and timely return in good condition. I agree to be held accountable for any loss or damage.";
 
 /**
  * Build a PDF for an approved (or further-progressed) equipment request.
@@ -453,23 +518,9 @@ export const buildEquipmentRequestPdfBytes = async (request) => {
   // Section D
   b.drawSectionTitle("SECTION D: TERMS & CONDITIONS");
   b.drawTerms(TERMS);
-  b.ensureSpace(28);
-  const ackLines = wrapText(
-    "I hereby acknowledge that I am responsible for the borrowed items and shall ensure their proper use and timely return in good condition. I agree to be held accountable for any loss or damage.",
-    b.font,
-    9,
-    CONTENT_WIDTH - 8
-  );
-  ackLines.forEach((line, i) => {
-    b.page.drawText(line, {
-      x: MARGIN + 8,
-      y: b.y - i * 11,
-      size: 9,
-      font: b.bold,
-      color: BLACK,
-    });
-  });
-  b.y -= ackLines.length * 11 + 8;
+  b.y -= 6;
+  b.drawCenteredAcknowledgement(ACK_TEXT);
+  b.drawAcknowledgementSignature(request.requesting?.name || "");
 
   // Section E
   b.drawSectionTitle("SECTION E: SIGNATURES AND APPROVAL");

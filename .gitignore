@@ -24,7 +24,6 @@ dist-ssr
 *.sw?
 *.md
 *.claude
-docs
 
 serviceAccountKey.json
 .env
